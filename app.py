@@ -1,114 +1,57 @@
-import streamlit as st
-from io import BytesIO
-from docx import Document
-import openai
+def build_prompt(asignatura, grado, edad, tema_insercion, destrezas_list):
+    """
+    Construye un prompt que solicita a la IA producir un JSON con la planificación
+    estructurada (una entrada por destreza).
+    """
+    instructions = (
+        "Genera un array JSON donde cada elemento corresponde a una destreza a?adida. "
+        "Cada elemento debe tener estas claves obligatorias: "
+        "'destreza', 'indicador', 'orientaciones', 'recursos', 'evaluacion'. "
+        "La clave 'orientaciones' debe ser un objeto con: "
+        "'anticipacion', 'construccion', 'construccion_transversal', 'consolidacion'. "
+        "En 'construccion_transversal' incluye una actividad transversal basada en el Tema de Inserción proporcionado. "
+        "Todas las actividades deben iniciar con verbos en infinitivo. "
+        "Los recursos online deben estar dentro de 'construccion' o 'anticipacion'/'consolidacion', "
+        "con formato: Nombre del recurso + enlace (ej: Video 'Título' - https://...). "
+        "Los recursos físicos deben ir únicamente en 'recursos' como lista de strings. "
+        "La clave 'evaluacion' debe contener acciones sustantivadas alineadas con el indicador. "
+        "Responde únicamente con JSON válido. No incluyas explicaciones ni texto adicional."
+    )
 
-# Configuraci贸n inicial de la p谩gina
-st.set_page_config(page_title="Generador de Plan de Clase", page_icon="馃摌", layout="wide")
+    header = {
+        "asignatura": asignatura,
+        "grado": grado,
+        "edad": edad,
+        "tema_insercion": tema_insercion
+    }
 
-st.title("馃摌 Generador Autom谩tico de Planes de Clase")
+    payload = {
+        "header": header,
+        "destrezas": destrezas_list,
+        "instructions": instructions
+    }
 
-# ------------------------------
-# SECCI脫N: Entrada de datos b谩sicos
-# ------------------------------
-st.subheader("Datos B谩sicos")
+    # Prompt reforzado con ejemplo de salida
+    example_output = [
+        {
+            "destreza": "Identificar ideas principales en un texto narrativo",
+            "indicador": "Resume un texto narrativo identificando la idea principal",
+            "orientaciones": {
+                "anticipacion": "Activar conocimientos previos preguntando sobre historias conocidas.",
+                "construccion": "Analizar un cuento breve aplicando técnicas de subrayado.",
+                "construccion_transversal": "Relacionar el texto con el tema de inserción: Medio ambiente (ej: identificar mensajes ecológicos).",
+                "consolidacion": "Elaborar un resumen escrito con la idea principal del cuento."
+            },
+            "recursos": ["pizarra", "cuaderno", "marcadores"],
+            "evaluacion": "Elaboración de un resumen que identifique la idea principal"
+        }
+    ]
 
-asignatura = st.text_input("Asignatura")
-grado = st.text_input("Grado")
-edad = st.number_input("Edad de los estudiantes", min_value=3, max_value=25, step=1)
-tema_insercion = st.text_input("Tema de Inserci贸n (actividad transversal)")
-
-# ------------------------------
-# SECCI脫N: Destrezas e indicadores
-# ------------------------------
-st.subheader("Datos Pedag贸gicos")
-
-destreza = st.text_area("Destreza con criterio de desempe帽o")
-indicador = st.text_area("Indicador de logro")
-tema_estudio = st.text_input("Tema de estudio (opcional)")
-
-# Variable de estado para almacenar el plan
-if "plan_generado" not in st.session_state:
-    st.session_state.plan_generado = None
-
-# ------------------------------
-# GENERAR PLAN
-# ------------------------------
-if st.button("Generar Plan de Clase"):
-    if asignatura and grado and edad and destreza and indicador and tema_insercion:
-        # Prompt adaptado
-        prompt = f"""
-Eres un agente experto en planificaci贸n de clases educativas. Tu funci贸n es elaborar planes de clase estructurados, aplicando metodolog铆as activas, inclusi贸n (DUA), y garantizando que los recursos online sean reales, actuales y accesibles.
-
-Datos b谩sicos:
-- Asignatura: {asignatura}
-- Grado: {grado}
-- Edad de los estudiantes: {edad}
-- Tema de Inserci贸n: {tema_insercion}
-
-Destreza: {destreza}
-Indicador de logro: {indicador}
-Tema de estudio: {tema_estudio if tema_estudio else "No especificado"}
-
-Genera el plan en una tabla con 5 columnas:
-[Destreza con criterio de desempe帽o | Indicador de logro | Orientaciones metodol贸gicas | Recursos | Orientaciones para la evaluaci贸n]
-
-Reglas:
-- Anticipaci贸n 鈫?actividades para activar conocimientos previos.
-- Construcci贸n 鈫?actividades con metodolog铆as activas (ABP, Flipped Classroom, SDA, etc.) e incluir una actividad transversal relacionada con el Tema de Inserci贸n: "{tema_insercion}".
-- Consolidaci贸n 鈫?actividades de refuerzo y aplicaci贸n.
-- Actividades con verbos en infinitivo.
-- Recursos online reales, actuales y accesibles.
-- Estrategias DUA para inclusi贸n.
-- Recursos: solo f铆sicos.
-- Evaluaci贸n: acciones sustantivadas alineadas con el indicador.
-"""
-
-        # 馃毃 Aqu铆 debes reemplazar por tu llamada real a OpenAI o al modelo que uses
-        # Ejemplo con OpenAI
-        import openai
-# ... otras importaciones
-
-# Inicializa el cliente de OpenAI
-client = openai.OpenAI()
-
-# Tu código original
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": prompt}]
-)
-
-        plan = response["choices"][0]["message"]["content"]
-        st.session_state.plan_generado = plan
-
-        st.success("鉁?Plan de clase generado con 茅xito")
-        st.write(plan)
-    else:
-        st.warning("鈿狅笍 Por favor, llena todos los campos obligatorios.")
-
-# ------------------------------
-# EXPORTAR A WORD
-# ------------------------------
-if st.session_state.plan_generado:
-    if st.button("馃摜 Exportar a Word"):
-        doc = Document()
-        doc.add_heading("Plan de Clase", level=1)
-        doc.add_paragraph(st.session_state.plan_generado)
-
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-
-        st.download_button(
-            label="猬囷笍 Descargar Plan en Word",
-            data=buffer,
-            file_name="plan_de_clase.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-
-# ------------------------------
-# NUEVO PLAN
-# ------------------------------
-if st.button("馃啎 Nuevo"):
-    st.session_state.plan_generado = None
-    st.experimental_rerun()
+    prompt = (
+        "Debes devolver SOLO JSON válido siguiendo esta estructura. "
+        "Aquí tienes los datos de entrada:\n\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+        + "\n\nEjemplo de salida JSON (usa esta forma, pero con los datos del usuario):\n"
+        + json.dumps(example_output, ensure_ascii=False, indent=2)
+    )
+    return prompt
