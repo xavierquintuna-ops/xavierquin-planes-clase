@@ -4,7 +4,7 @@ from io import BytesIO
 from docx import Document
 import json, os, time
 
-# Intento cliente moderno de OpenAI, con fallback al cliente cl®¢sico
+# Intento cliente moderno de OpenAI, con fallback al cliente clËäçsico
 try:
     from openai import OpenAI as OpenAIClientModern
     modern_openai_available = True
@@ -16,11 +16,11 @@ except Exception:
         openai_classic = None
 
 st.set_page_config(page_title="Generador de Plan de Clase", page_icon="??", layout="wide")
-st.title("?? Generador Autom®¢tico de Planes de Clase")
+st.title("?? Generador AutomËäçtico de Planes de Clase")
 
 # --- Sidebar: OpenAI setup ---
-st.sidebar.header("OpenAI / Configuraci®Æn")
-api_key_input = st.sidebar.text_input("OpenAI API Key (pegar aqu®™, opcional)", type="password")
+st.sidebar.header("OpenAI / ConfiguraciËªän")
+api_key_input = st.sidebar.text_input("OpenAI API Key (pegar aquËµ§, opcional)", type="password")
 model_name = st.sidebar.text_input("Modelo (ej: gpt-4o-mini)", value="gpt-4o-mini")
 max_tokens = st.sidebar.number_input("Max tokens (OpenAI)", value=1500, step=100)
 temperature = st.sidebar.slider("Temperatura", 0.0, 1.0, 0.2)
@@ -41,7 +41,7 @@ def get_api_key():
 OPENAI_API_KEY = get_api_key()
 
 if not OPENAI_API_KEY:
-    st.sidebar.warning("No se detect®Æ OpenAI API Key. P®¶gala arriba o configura STREAMLIT secrets / variable de entorno.")
+    st.sidebar.warning("No se detectËªä OpenAI API Key. PË∞∑gala arriba o configura STREAMLIT secrets / variable de entorno.")
 
 # --- Session state init ---
 if "destrezas" not in st.session_state:
@@ -53,17 +53,17 @@ if "plan_parsed" not in st.session_state:
 if "doc_bytes" not in st.session_state:
     st.session_state["doc_bytes"] = None
 
-# --- Datos b®¢sicos ---
-st.subheader("Datos B®¢sicos")
+# --- Datos bËäçsicos ---
+st.subheader("Datos BËäçsicos")
 col1, col2 = st.columns(2)
 with col1:
     asignatura = st.text_input("Asignatura")
     grado = st.text_input("Grado")
 with col2:
     edad = st.number_input("Edad de los estudiantes", min_value=3, max_value=99, value=12)
-    tema_insercion = st.text_input("Tema de Inserci®Æn (actividad transversal)")
+    tema_insercion = st.text_input("Tema de InserciËªän (actividad transversal)")
 
-# --- Datos pedag®Ægicos ---
+# --- Datos pedagËªägicos ---
 st.subheader("Agregar Destreza e Indicador")
 d_col1, d_col2 = st.columns([2,2])
 with d_col1:
@@ -96,7 +96,7 @@ def extract_first_json(text: str):
             start = i
             break
     if start is None:
-        raise ValueError("No se encontr®Æ JSON en el texto.")
+        raise ValueError("No se encontrËªä JSON en el texto.")
     stack, in_string, escape = [], False, False
     for i in range(start, len(text)):
         ch = text[i]
@@ -119,7 +119,7 @@ def call_openai_chat(prompt_text: str):
     if not OPENAI_API_KEY:
         raise RuntimeError("API Key no configurada.")
     messages = [
-        {"role": "system", "content": "Eres un agente experto en planificaci®Æn de clases educativas. Responde SOLO con JSON v®¢lido."},
+        {"role": "system", "content": "Eres un agente experto en planificaciËªän de clases educativas. Responde SOLO con JSON vËäçlido."},
         {"role": "user", "content": prompt_text}
     ]
     if modern_openai_available:
@@ -139,8 +139,8 @@ def build_prompt(asignatura, grado, edad, tema_insercion, destrezas_list):
         "Claves: 'destreza','indicador','orientaciones','recursos','evaluacion'. "
         "orientaciones = {'anticipacion','construccion','construccion_transversal','consolidacion'}. "
         "Incluye actividad transversal en 'construccion_transversal'. "
-        "Usa verbos en infinitivo. Recursos online en orientaciones, f®™sicos en 'recursos'. "
-        "Respuesta SOLO JSON v®¢lido."
+        "Usa verbos en infinitivo. Recursos online en orientaciones, fËµ§sicos en 'recursos'. "
+        "Respuesta SOLO JSON vËäçlido."
     )
 
     header = {"asignatura": asignatura, "grado": grado, "edad": edad, "tema_insercion": tema_insercion}
@@ -152,17 +152,17 @@ def build_prompt(asignatura, grado, edad, tema_insercion, destrezas_list):
             "indicador": "Resume un texto narrativo identificando la idea principal",
             "orientaciones": {
                 "anticipacion": "Activar conocimientos previos preguntando sobre historias conocidas.",
-                "construccion": "Analizar un cuento breve aplicando t®¶cnicas de subrayado.",
-                "construccion_transversal": "Relacionar el texto con el Tema de Inserci®Æn: Medio ambiente.",
+                "construccion": "Analizar un cuento breve aplicando tË∞∑cnicas de subrayado.",
+                "construccion_transversal": "Relacionar el texto con el Tema de InserciËªän: Medio ambiente.",
                 "consolidacion": "Elaborar un resumen escrito con la idea principal."
             },
             "recursos": ["pizarra","cuaderno","marcadores"],
-            "evaluacion": "Elaboraci®Æn de un resumen identificando la idea principal"
+            "evaluacion": "ElaboraciËªän de un resumen identificando la idea principal"
         }
     ]
 
     prompt = (
-        "Debes devolver SOLO JSON v®¢lido. Datos de entrada:\n\n"
+        "Debes devolver SOLO JSON vËäçlido. Datos de entrada:\n\n"
         + json.dumps(payload, ensure_ascii=True, indent=2)
         + "\n\nEjemplo de salida:\n"
         + json.dumps(example_output, ensure_ascii=True, indent=2)
@@ -172,11 +172,11 @@ def build_prompt(asignatura, grado, edad, tema_insercion, destrezas_list):
 def create_docx_from_parsed(parsed_list, asignatura, grado, edad, tema_insercion):
     doc = Document()
     doc.add_heading("Plan de Clase", level=1)
-    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de Inserci®Æn: {tema_insercion}")
+    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de InserciËªän: {tema_insercion}")
     table = doc.add_table(rows=1, cols=5)
     hdr = table.rows[0].cells
     hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = (
-        "Destreza","Indicador","Orientaciones metodol®Ægicas","Recursos (f®™sicos)","Evaluaci®Æn"
+        "Destreza","Indicador","Orientaciones metodolËªägicas","Recursos (fËµ§sicos)","EvaluaciËªän"
     )
     for item in parsed_list:
         row = table.add_row().cells
@@ -185,10 +185,10 @@ def create_docx_from_parsed(parsed_list, asignatura, grado, edad, tema_insercion
         orient = item.get("orientaciones",{})
         parts = []
         if isinstance(orient, dict):
-            if orient.get("anticipacion"): parts.append("Anticipaci®Æn: "+str(orient["anticipacion"]))
-            if orient.get("construccion"): parts.append("Construcci®Æn: "+str(orient["construccion"]))
+            if orient.get("anticipacion"): parts.append("AnticipaciËªän: "+str(orient["anticipacion"]))
+            if orient.get("construccion"): parts.append("ConstrucciËªän: "+str(orient["construccion"]))
             if orient.get("construccion_transversal"): parts.append("Actividad transversal: "+str(orient["construccion_transversal"]))
-            if orient.get("consolidacion"): parts.append("Consolidaci®Æn: "+str(orient["consolidacion"]))
+            if orient.get("consolidacion"): parts.append("ConsolidaciËªän: "+str(orient["consolidacion"]))
         row[2].text = "\n".join(parts)
         row[3].text = ", ".join(item.get("recursos",[])) if isinstance(item.get("recursos"), list) else str(item.get("recursos",""))
         row[4].text = str(item.get("evaluacion",""))
@@ -207,7 +207,7 @@ if st.button("?? Generar Plan de Clase"):
                 prompt = build_prompt(asignatura, grado, edad, tema_insercion, st.session_state["destrezas"])
                 response_text = call_openai_chat(prompt)
 
-                # ?? Normalizar a UTF-8 v®¢lido
+                # ?? Normalizar a UTF-8 vËäçlido
                 response_text = response_text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
                 st.session_state["plan_raw"] = response_text
 
@@ -221,7 +221,7 @@ if st.button("?? Generar Plan de Clase"):
                     st.session_state["plan_parsed"] = parsed
                     buffer = create_docx_from_parsed(parsed, asignatura, grado, edad, tema_insercion)
                     st.session_state["doc_bytes"] = buffer.getvalue()
-                    st.success("? Plan generado con ®¶xito")
+                    st.success("? Plan generado con Ë∞∑xito")
                 else:
                     st.warning("No se pudo parsear JSON, exportando texto bruto.")
                     doc = Document()
