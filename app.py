@@ -54,9 +54,9 @@ Genera el plan en una tabla con 5 columnas:
 [Destreza con criterio de desempeño | Indicador de logro | Orientaciones metodológicas | Recursos | Orientaciones para la evaluación]
 
 Reglas:
-- Anticipación → actividades para activar conocimientos previos.
-- Construcción → actividades con metodologías activas (ABP, Flipped Classroom, SDA, etc.) e incluir una actividad transversal relacionada con el Tema de Inserción: "{tema_insercion}".
-- Consolidación → actividades de refuerzo y aplicación.
+- Anticipación �?actividades para activar conocimientos previos.
+- Construcción �?actividades con metodologías activas (ABP, Flipped Classroom, SDA, etc.) e incluir una actividad transversal relacionada con el Tema de Inserción: "{tema_insercion}".
+- Consolidación �?actividades de refuerzo y aplicación.
 - Actividades con verbos en infinitivo.
 - Recursos online reales, actuales y accesibles.
 - Estrategias DUA para inclusión.
@@ -66,15 +66,22 @@ Reglas:
 
         # 🚨 Aquí debes reemplazar por tu llamada real a OpenAI o al modelo que uses
         # Ejemplo con OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+        import openai
+# ... otras importaciones
+
+# Inicializa el cliente de OpenAI
+client = openai.OpenAI()
+
+# Tu c��digo original
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}]
+)
 
         plan = response["choices"][0]["message"]["content"]
         st.session_state.plan_generado = plan
 
-        st.success("✅ Plan de clase generado con éxito")
+        st.success("�?Plan de clase generado con éxito")
         st.write(plan)
     else:
         st.warning("⚠️ Por favor, llena todos los campos obligatorios.")
