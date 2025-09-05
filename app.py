@@ -1,107 +1,107 @@
 import streamlit as st
-import requests
-import os
+from io import BytesIO
 from docx import Document
+import openai
 
-# Configuración Hugging Face con token desde Streamlit Secrets
-API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
-headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+# Configuración inicial de la página
+st.set_page_config(page_title="Generador de Plan de Clase", page_icon="📘", layout="wide")
 
-def generar_plan(prompt):
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    if response.status_code == 200:
-        return response.json()[0]["generated_text"]
-    else:
-        return "⚠️ Error al generar el plan."
+st.title("📘 Generador Automático de Planes de Clase")
 
-# Interfaz
-st.set_page_config(page_title="XAVIERQUIN PLANES DE CLASE", page_icon="📚", layout="wide")
-st.title("📚 XAVIERQUIN PLANES DE CLASE")
-st.caption("Aplicación de planificación educativa con metodologías activas y DUA")
+# ------------------------------
+# SECCIÓN: Entrada de datos básicos
+# ------------------------------
+st.subheader("Datos Básicos")
 
-# Datos iniciales
-st.header("1️⃣ Datos básicos")
 asignatura = st.text_input("Asignatura")
 grado = st.text_input("Grado")
-edad = st.number_input("Edad de los estudiantes", min_value=3, max_value=25)
+edad = st.number_input("Edad de los estudiantes", min_value=3, max_value=25, step=1)
+tema_insercion = st.text_input("Tema de Inserción (actividad transversal)")
 
-# Agregar destrezas
-st.header("2️⃣ Destreza e indicador")
-if "destrezas" not in st.session_state:
-    st.session_state.destrezas = []
+# ------------------------------
+# SECCIÓN: Destrezas e indicadores
+# ------------------------------
+st.subheader("Datos Pedagógicos")
 
-destreza = st.text_input("Destreza con criterio de desempeño")
-indicador = st.text_input("Indicador de logro")
-tema = st.text_input("Tema de estudio (opcional)")
+destreza = st.text_area("Destreza con criterio de desempeño")
+indicador = st.text_area("Indicador de logro")
+tema_estudio = st.text_input("Tema de estudio (opcional)")
 
-if st.button("➕ Agregar destreza"):
-    if destreza and indicador:
-        st.session_state.destrezas.append({"destreza": destreza, "indicador": indicador, "tema": tema})
-    else:
-        st.warning("Por favor ingresa al menos Destreza e Indicador.")
+# Variable de estado para almacenar el plan
+if "plan_generado" not in st.session_state:
+    st.session_state.plan_generado = None
 
-# Mostrar lista
-if st.session_state.destrezas:
-    st.write("### ✅ Destreza(s) añadida(s):")
-    for i, d in enumerate(st.session_state.destrezas):
-        st.write(f"{i+1}. {d['destreza']} → {d['indicador']} (Tema: {d['tema']})")
-
-# Generar planificación
-planes = []
-if st.button("🚀 Generar planificación"):
-    for d in st.session_state.destrezas:
+# ------------------------------
+# GENERAR PLAN
+# ------------------------------
+if st.button("Generar Plan de Clase"):
+    if asignatura and grado and edad and destreza and indicador and tema_insercion:
+        # Prompt adaptado
         prompt = f"""
-Eres un agente experto en planificación de clases educativas. 
-Genera un plan de clase estructurado con metodologías activas y DUA.
+Eres un agente experto en planificación de clases educativas. Tu función es elaborar planes de clase estructurados, aplicando metodologías activas, inclusión (DUA), y garantizando que los recursos online sean reales, actuales y accesibles.
 
-Datos:
+Datos básicos:
 - Asignatura: {asignatura}
 - Grado: {grado}
-- Edad: {edad} años
-- Destreza: {d['destreza']}
-- Indicador: {d['indicador']}
-- Tema: {d['tema']}
+- Edad de los estudiantes: {edad}
+- Tema de Inserción: {tema_insercion}
 
-Formato de salida: tabla de 5 columnas  
+Destreza: {destreza}
+Indicador de logro: {indicador}
+Tema de estudio: {tema_estudio if tema_estudio else "No especificado"}
+
+Genera el plan en una tabla con 5 columnas:
 [Destreza con criterio de desempeño | Indicador de logro | Orientaciones metodológicas | Recursos | Orientaciones para la evaluación]
 
 Reglas:
-- Orientaciones metodológicas → dividir en Anticipación, Construcción y Consolidación.  
-- Verbos en infinitivo.  
-- Incluir recursos digitales reales y accesibles (nombre + enlace).  
-- Recursos físicos solo en la columna Recursos.  
-- Estrategias DUA para inclusión.  
-- Evaluación en acciones sustantivadas alineadas al indicador.
-        """
-        plan = generar_plan(prompt)
-        planes.append({"destreza": d["destreza"], "indicador": d["indicador"], "plan": plan})
+- Anticipación → actividades para activar conocimientos previos.
+- Construcción → actividades con metodologías activas (ABP, Flipped Classroom, SDA, etc.) e incluir una actividad transversal relacionada con el Tema de Inserción: "{tema_insercion}".
+- Consolidación → actividades de refuerzo y aplicación.
+- Actividades con verbos en infinitivo.
+- Recursos online reales, actuales y accesibles.
+- Estrategias DUA para inclusión.
+- Recursos: solo físicos.
+- Evaluación: acciones sustantivadas alineadas con el indicador.
+"""
 
-    st.header("3️⃣ 📑 Planificación generada")
-    for p in planes:
-        st.markdown(f"**Destreza:** {p['destreza']}  \n**Indicador:** {p['indicador']}  \n\n{p['plan']}")
+        # 🚨 Aquí debes reemplazar por tu llamada real a OpenAI o al modelo que uses
+        # Ejemplo con OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    # Exportar a Word
-    def exportar_word(planes):
+        plan = response["choices"][0]["message"]["content"]
+        st.session_state.plan_generado = plan
+
+        st.success("✅ Plan de clase generado con éxito")
+        st.write(plan)
+    else:
+        st.warning("⚠️ Por favor, llena todos los campos obligatorios.")
+
+# ------------------------------
+# EXPORTAR A WORD
+# ------------------------------
+if st.session_state.plan_generado:
+    if st.button("📥 Exportar a Word"):
         doc = Document()
-        doc.add_heading("XAVIERQUIN PLANES DE CLASE", 0)
-        table = doc.add_table(rows=1, cols=5)
-        hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = "Destreza"
-        hdr_cells[1].text = "Indicador"
-        hdr_cells[2].text = "Orientaciones metodológicas"
-        hdr_cells[3].text = "Recursos"
-        hdr_cells[4].text = "Orientaciones para la evaluación"
+        doc.add_heading("Plan de Clase", level=1)
+        doc.add_paragraph(st.session_state.plan_generado)
 
-        for p in planes:
-            row_cells = table.add_row().cells
-            row_cells[0].text = p["destreza"]
-            row_cells[1].text = p["indicador"]
-            row_cells[2].text = p["plan"]  # aquí el modelo devuelve la tabla como texto
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
 
-        doc.save("planificacion.docx")
-        return "planificacion.docx"
+        st.download_button(
+            label="⬇️ Descargar Plan en Word",
+            data=buffer,
+            file_name="plan_de_clase.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
-    if st.button("💾 Exportar a Word"):
-        archivo = exportar_word(planes)
-        with open(archivo, "rb") as f:
-            st.download_button("⬇️ Descargar Word", f, file_name="planificacion.docx")
+# ------------------------------
+# NUEVO PLAN
+# ------------------------------
+if st.button("🆕 Nuevo"):
+    st.session_state.plan_generado = None
+    st.experimental_rerun()
