@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versi®Æn estable y UTF-8, usando st.rerun)
+app.py - Generador de Plan de Clase (versiËªän estable y UTF-8, usando st.rerun)
 """
 
 import streamlit as st
@@ -10,15 +10,15 @@ import json, os, time, unicodedata
 from typing import List, Dict, Any
 
 # -------------------------
-# Configuraci®Æn de la p®¢gina
+# ConfiguraciËªän de la pËäçgina
 # -------------------------
 st.set_page_config(page_title="Generador de Plan de Clase", page_icon="??", layout="wide")
-st.title("?? Generador Autom®¢tico de Planes de Clase")
+st.title("?? Generador AutomËäçtico de Planes de Clase")
 
 # -------------------------
 # Sidebar
 # -------------------------
-st.sidebar.header("Configuraci®Æn API / Modelo")
+st.sidebar.header("ConfiguraciËªän API / Modelo")
 api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, si no usas Gemini)", type="password")
 model_name = st.sidebar.text_input("Modelo OpenAI (ej: gpt-4o-mini)", value="gpt-4o-mini")
 max_tokens = st.sidebar.number_input("Max tokens", value=1500, step=100)
@@ -51,7 +51,7 @@ except Exception:
     _has_gemini = False
 
 # -------------------------
-# Inicializaci®Æn session_state
+# InicializaciËªän session_state
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -85,7 +85,7 @@ def extract_first_json(text: str) -> str:
             start = i
             break
     if start is None:
-        raise ValueError("No se encontr®Æ JSON en el texto.")
+        raise ValueError("No se encontrËªä JSON en el texto.")
     stack, in_string, escape = [], False, False
     for i in range(start, len(text)):
         ch = text[i]
@@ -109,11 +109,11 @@ def extract_first_json(text: str) -> str:
 def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, grado: str, edad: Any, tema_insercion: str) -> BytesIO:
     doc = Document()
     doc.add_heading("Plan de Clase", level=1)
-    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de Inserci®Æn: {tema_insercion}")
+    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de InserciËªän: {tema_insercion}")
     table = doc.add_table(rows=1, cols=5)
     hdr = table.rows[0].cells
     hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = (
-        "Destreza", "Indicador", "Orientaciones", "Recursos (f®™sicos)", "Evaluaci®Æn"
+        "Destreza", "Indicador", "Orientaciones", "Recursos (fËµ§sicos)", "EvaluaciËªän"
     )
     for item in parsed_list:
         row = table.add_row().cells
@@ -122,10 +122,10 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
         orient = item.get("orientaciones",{}) or {}
         parts = []
         if isinstance(orient, dict):
-            if orient.get("anticipacion"): parts.append("Anticipaci®Æn: " + str(orient["anticipacion"]))
-            if orient.get("construccion"): parts.append("Construcci®Æn: " + str(orient["construccion"]))
+            if orient.get("anticipacion"): parts.append("AnticipaciËªän: " + str(orient["anticipacion"]))
+            if orient.get("construccion"): parts.append("ConstrucciËªän: " + str(orient["construccion"]))
             if orient.get("construccion_transversal"): parts.append("Actividad transversal: " + str(orient["construccion_transversal"]))
-            if orient.get("consolidacion"): parts.append("Consolidaci®Æn: " + str(orient["consolidacion"]))
+            if orient.get("consolidacion"): parts.append("ConsolidaciËªän: " + str(orient["consolidacion"]))
         row[2].text = "\n".join(parts)
         recursos = item.get("recursos",[])
         row[3].text = ", ".join(map(str, recursos)) if isinstance(recursos, list) else str(recursos)
@@ -147,32 +147,32 @@ def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.
                     return fn(prompt_text, max_tokens=max_tokens, temperature=temperature)
                 except TypeError:
                     return fn(prompt_text)
-        raise RuntimeError("gemini_client presente pero sin funci®Æn invocable conocida.")
+        raise RuntimeError("gemini_client presente pero sin funciËªän invocable conocida.")
     if OPENAI_API_KEY:
         import openai
         openai.api_key = OPENAI_API_KEY
         resp = openai.ChatCompletion.create(
             model=model_name,
             messages=[
-                {"role":"system","content":"Eres un experto en planificaci®Æn de clases. Responde SOLO con JSON v®¢lido."},
+                {"role":"system","content":"Eres un experto en planificaciËªän de clases. Responde SOLO con JSON vËäçlido."},
                 {"role":"user","content":prompt_text}
             ],
             max_tokens=int(max_tokens),
             temperature=float(temperature)
         )
         return resp["choices"][0]["message"]["content"]
-    raise RuntimeError("No hay integraci®Æn: a?ade gemini_client.py o configura OPENAI_API_KEY.")
+    raise RuntimeError("No hay integraciËªän: a?ade gemini_client.py o configura OPENAI_API_KEY.")
 
 # -------------------------
 # Prompt
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "RESPONDE ®≤NICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves EXACTAS: "
+        "RESPONDE ËøÜNICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves EXACTAS: "
         "'destreza','indicador','orientaciones','recursos','evaluacion'. "
         "La subclave 'orientaciones' debe contener: 'anticipacion','construccion','construccion_transversal','consolidacion'. "
-        f"En 'construccion_transversal' incluye UNA actividad relacionada con el Tema de Inserci®Æn: {tema_insercion}. "
-        "NO uses tablas ni HTML ni texto adicional. SOLO JSON v®¢lido."
+        f"En 'construccion_transversal' incluye UNA actividad relacionada con el Tema de InserciËªän: {tema_insercion}. "
+        "NO uses tablas ni HTML ni texto adicional. SOLO JSON vËäçlido."
     )
     payload = {"header":{"asignatura":asignatura,"grado":grado,"edad":edad,"tema_insercion":tema_insercion},
                "destrezas":destrezas_list,"instructions":instructions}
@@ -181,14 +181,14 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
 # -------------------------
 # Interfaz
 # -------------------------
-st.subheader("Datos b®¢sicos")
+st.subheader("Datos bËäçsicos")
 c1, c2 = st.columns(2)
 with c1:
     st.text_input("Asignatura", key="asignatura")
     st.text_input("Grado", key="grado")
 with c2:
     st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad")
-    st.text_input("Tema de Inserci®Æn (actividad transversal)", key="tema_insercion")
+    st.text_input("Tema de InserciËªän (actividad transversal)", key="tema_insercion")
 
 st.markdown("---")
 st.subheader("Agregar destreza e indicador")
@@ -226,7 +226,7 @@ def generar_plan_callback():
     faltantes = []
     if not asig: faltantes.append("Asignatura")
     if not grad: faltantes.append("Grado")
-    if not tema: faltantes.append("Tema de Inserci®Æn")
+    if not tema: faltantes.append("Tema de InserciËªän")
     if not dests: faltantes.append("Al menos una destreza")
     if faltantes:
         st.session_state["last_error"] = "Faltan campos: " + ", ".join(faltantes)
@@ -247,7 +247,7 @@ def generar_plan_callback():
             st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
             st.success("? Plan generado")
         else:
-            st.session_state["last_error"] = "El modelo no devolvi®Æ una lista JSON v®¢lida."
+            st.session_state["last_error"] = "El modelo no devolviËªä una lista JSON vËäçlida."
     except Exception as e:
         st.session_state["last_error"] = str(e)
 
