@@ -23,10 +23,10 @@ except Exception:
 # -------------------------
 # Configuracion de la pagina
 # -------------------------
-st.set_page_config(page_title="Xavierquin Plan de Clase", page_icon="??", layout="wide")
-st.title("?? Xavierquin Plan de Clase")
+st.set_page_config(page_title="Xavierquin Plan de Clase", page_icon="📝", layout="wide")
+st.title("📚 Xavierquin Plan de Clase")
 
-# A?ade el GIF animado
+# Añade el GIF animado
 st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmZyeWRwZmRlbGR3bGw0Z2I3aGFjNGg1emJ1bWd3azNxdnU1bGF6MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26AHOx46iHjG6P7jO/giphy.gif") # Puedes cambiar este GIF por otro que te guste más
 
 # -------------------------
@@ -160,25 +160,25 @@ def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.
         )
         return resp["choices"][0]["message"]["content"]
     
-    raise RuntimeError("No hay integración: a?ade gemini_client.py o configura OPENAI_API_KEY.")
+    raise RuntimeError("No hay integración: añade gemini_client.py o configura OPENAI_API_KEY.")
 
 # -------------------------
 # Prompt (Versión actualizada)
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "Eres un experto en dise?o curricular y planificación educativa.\n\n"
+        "Eres un experto en diseño curricular y planificación educativa.\n\n"
         "Tu tarea es generar un plan de clase estructurado en formato JSON válido, con actividades reales y recursos en línea que sean gratuitos, actuales y funcionales al hacer clic.\n\n"
         "### Instrucciones:\n"
         "1. Responde **únicamente con un array JSON**.\n"
         "2. Cada objeto del array representa una destreza y debe tener las siguientes claves:\n"
-        "   - \"destreza\": Texto de la destreza con criterio de desempe?o.\n"
+        "   - \"destreza\": Texto de la destreza con criterio de desempeño.\n"
         "   - \"indicador\": Texto del indicador de logro.\n"
         "   - \"orientaciones\": Objeto con las siguientes subclaves:\n"
         "     * \"anticipacion\": Actividades para activar conocimientos previos (ej. lluvia de ideas, pregunta detonadora, video de YouTube con enlace válido y actual, identificación de ideas principales).\n"
         "     * \"construccion\": **Mínimo 5 actividades pedagógicas** que desarrollen la destreza.\n"
         "       - Deben usar recursos online reales (YouTube, Wordwall, Educaplay, Kahoot, Genially, etc.).\n"
-        "       - Deben incluir actividades DUA (Dise?o Universal de Aprendizaje) para atender a la diversidad de estudiantes.\n"
+        "       - Deben incluir actividades DUA (Diseño Universal de Aprendizaje) para atender a la diversidad de estudiantes.\n"
         "       - Cada actividad debe incluir nombre, descripción y enlace válido y gratuito.\n"
         "     * \"construccion_transversal\": Incluir **una actividad transversal** relacionada con el Tema de Inserción proporcionado por el usuario, con recurso en línea si es posible.\n"
         "     * \"consolidacion\": Actividades de aplicación y refuerzo de lo aprendido (ej. ejercicios de texto, organizadores gráficos, mapas mentales, etc.).\n"
@@ -220,7 +220,7 @@ with st.form(key="form_add_destreza"):
     d = st.text_area("Destreza", key="form_destreza")
     i = st.text_area("Indicador de logro", key="form_indicador")
     t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
-    submitted = st.form_submit_button("? Agregar destreza")
+    submitted = st.form_submit_button("➕ Agregar destreza")
 
     if submitted:
         dd, ii, tt = normalize_text(d), normalize_text(i), normalize_text(t)
@@ -228,12 +228,12 @@ with st.form(key="form_add_destreza"):
             st.warning("Completa la destreza y el indicador antes de agregar.")
         else:
             st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
-            st.success("Destreza agregada ?")
-            st.rerun()   # ? corregido
+            st.success("Destreza agregada ✅")
+            st.rerun()
 
 # Mostrar destrezas
 if st.session_state["destrezas"]:
-    st.subheader("Destrezas a?adidas")
+    st.subheader("Destrezas añadidas")
     st.table(st.session_state["destrezas"])
 
 # -------------------------
@@ -256,50 +256,91 @@ def generar_plan_callback():
         return
     try:
         prompt = build_prompt(asig, grad, edad_val, tema, dests)
-        resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
+        with st.spinner("Generando plan de clase..."):
+            resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
+        
         resp = str(resp).encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
         st.session_state["plan_raw"] = resp
+        
         try:
             json_text = extract_first_json(resp)
             parsed = json.loads(json_text)
         except Exception as e:
             st.session_state["last_error"] = f"No se pudo parsear JSON: {e}"
             return
+
         if isinstance(parsed, list):
             st.session_state["plan_parsed"] = parsed
             st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
-            st.success("? Plan generado")
+            st.success("✅ Plan generado. Desplácese hacia abajo para ver el resultado.")
         else:
             st.session_state["last_error"] = "El modelo no devolvió una lista JSON válida."
     except Exception as e:
         st.session_state["last_error"] = str(e)
 
-st.button("?? Generar Plan de Clase", on_click=generar_plan_callback)
+st.button("🚀 Generar Plan de Clase", on_click=generar_plan_callback)
 
 if st.session_state.get("last_error"):
     st.error(st.session_state["last_error"])
 
 if st.session_state.get("plan_parsed"):
-    st.subheader("?? Vista previa del Plan")
-    st.table(st.session_state["plan_parsed"])
+    st.markdown("---")
+    st.subheader("📄 Vista previa del Plan")
+
+    for item in st.session_state["plan_parsed"]:
+        st.markdown(f"#### **Destreza:** {item.get('destreza', '')}")
+        st.markdown(f"**Indicador:** {item.get('indicador', '')}")
+        st.markdown(f"**Evaluación:** {item.get('evaluacion', '')}")
+        st.markdown(f"**Recursos Físicos:** {', '.join(item.get('recursos', ''))}")
+        
+        st.markdown("---")
+        st.markdown("### **ORIENTACIONES METODOLÓGICAS**")
+        
+        orientaciones = item.get("orientaciones", {})
+        
+        if "anticipacion" in orientaciones:
+            st.markdown("#### **ANTICIPACIÓN**")
+            st.markdown(orientaciones["anticipacion"])
+            st.markdown(" ") # Salto de línea
+        
+        if "construccion" in orientaciones:
+            st.markdown("#### **CONSTRUCCIÓN**")
+            # Este es un cambio importante, ya que el modelo genera un texto plano
+            # y no podemos garantizar que el formato de lista se mantenga.
+            # Simplemente mostramos el texto tal cual, esperando que la IA lo haya formateado bien.
+            st.markdown(orientaciones["construccion"])
+            st.markdown(" ") # Salto de línea
+
+        if "construccion_transversal" in orientaciones:
+            st.markdown("#### **CONSTRUCCIÓN TRANSVERSAL**")
+            st.markdown(orientaciones["construccion_transversal"])
+            st.markdown(" ") # Salto de línea
+
+        if "consolidacion" in orientaciones:
+            st.markdown("#### **CONSOLIDACIÓN**")
+            # De nuevo, se muestra el texto plano del modelo.
+            st.markdown(orientaciones["consolidacion"])
+            st.markdown(" ") # Salto de línea
+
+    st.markdown("---")
 
 if st.session_state.get("plan_raw"):
-    with st.expander("Ver salida bruta"):
+    with st.expander("Ver salida bruta (solo para depuración)"):
         st.code(st.session_state["plan_raw"], language="json")
 
 if st.session_state.get("doc_bytes"):
     ts = time.strftime("%Y%m%d_%H%M%S")
     st.download_button(
-        "?? Exportar a Word",
+        "📝 Exportar a Word",
         data=st.session_state["doc_bytes"],
         file_name=f"plan_{ts}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-if st.button("?? Nuevo"):
+if st.button("🔄 Nuevo"):
     for k, v in defaults.items():
         st.session_state[k] = v
-    st.rerun()   # ? corregido
+    st.rerun()
 
 if debug_mode:
     st.sidebar.subheader("DEBUG session_state")
