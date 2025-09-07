@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versiÃ³n estable y UTF-8)
+app.py - Generador de Plan de Clase (versi¨®n estable y UTF-8, usando st.rerun)
 """
 
 import streamlit as st
@@ -10,15 +10,15 @@ import json, os, time, unicodedata
 from typing import List, Dict, Any
 
 # -------------------------
-# ConfiguraciÃ³n de la pÃ¡gina
+# Configuraci¨®n de la p¨¢gina
 # -------------------------
-st.set_page_config(page_title="Generador de Plan de Clase", page_icon="ðŸ“˜", layout="wide")
-st.title("ðŸ“˜ Generador AutomÃ¡tico de Planes de Clase")
+st.set_page_config(page_title="Generador de Plan de Clase", page_icon="??", layout="wide")
+st.title("?? Generador Autom¨¢tico de Planes de Clase")
 
 # -------------------------
 # Sidebar
 # -------------------------
-st.sidebar.header("ConfiguraciÃ³n API / Modelo")
+st.sidebar.header("Configuraci¨®n API / Modelo")
 api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, si no usas Gemini)", type="password")
 model_name = st.sidebar.text_input("Modelo OpenAI (ej: gpt-4o-mini)", value="gpt-4o-mini")
 max_tokens = st.sidebar.number_input("Max tokens", value=1500, step=100)
@@ -51,7 +51,7 @@ except Exception:
     _has_gemini = False
 
 # -------------------------
-# InicializaciÃ³n session_state
+# Inicializaci¨®n session_state
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -85,7 +85,7 @@ def extract_first_json(text: str) -> str:
             start = i
             break
     if start is None:
-        raise ValueError("No se encontrÃ³ JSON en el texto.")
+        raise ValueError("No se encontr¨® JSON en el texto.")
     stack, in_string, escape = [], False, False
     for i in range(start, len(text)):
         ch = text[i]
@@ -109,11 +109,11 @@ def extract_first_json(text: str) -> str:
 def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, grado: str, edad: Any, tema_insercion: str) -> BytesIO:
     doc = Document()
     doc.add_heading("Plan de Clase", level=1)
-    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de InserciÃ³n: {tema_insercion}")
+    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de Inserci¨®n: {tema_insercion}")
     table = doc.add_table(rows=1, cols=5)
     hdr = table.rows[0].cells
     hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = (
-        "Destreza", "Indicador", "Orientaciones", "Recursos (fÃ­sicos)", "EvaluaciÃ³n"
+        "Destreza", "Indicador", "Orientaciones", "Recursos (f¨ªsicos)", "Evaluaci¨®n"
     )
     for item in parsed_list:
         row = table.add_row().cells
@@ -122,10 +122,10 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
         orient = item.get("orientaciones",{}) or {}
         parts = []
         if isinstance(orient, dict):
-            if orient.get("anticipacion"): parts.append("AnticipaciÃ³n: " + str(orient["anticipacion"]))
-            if orient.get("construccion"): parts.append("ConstrucciÃ³n: " + str(orient["construccion"]))
+            if orient.get("anticipacion"): parts.append("Anticipaci¨®n: " + str(orient["anticipacion"]))
+            if orient.get("construccion"): parts.append("Construcci¨®n: " + str(orient["construccion"]))
             if orient.get("construccion_transversal"): parts.append("Actividad transversal: " + str(orient["construccion_transversal"]))
-            if orient.get("consolidacion"): parts.append("ConsolidaciÃ³n: " + str(orient["consolidacion"]))
+            if orient.get("consolidacion"): parts.append("Consolidaci¨®n: " + str(orient["consolidacion"]))
         row[2].text = "\n".join(parts)
         recursos = item.get("recursos",[])
         row[3].text = ", ".join(map(str, recursos)) if isinstance(recursos, list) else str(recursos)
@@ -147,32 +147,32 @@ def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.
                     return fn(prompt_text, max_tokens=max_tokens, temperature=temperature)
                 except TypeError:
                     return fn(prompt_text)
-        raise RuntimeError("gemini_client presente pero sin funciÃ³n invocable conocida.")
+        raise RuntimeError("gemini_client presente pero sin funci¨®n invocable conocida.")
     if OPENAI_API_KEY:
         import openai
         openai.api_key = OPENAI_API_KEY
         resp = openai.ChatCompletion.create(
             model=model_name,
             messages=[
-                {"role":"system","content":"Eres un experto en planificaciÃ³n de clases. Responde SOLO con JSON vÃ¡lido."},
+                {"role":"system","content":"Eres un experto en planificaci¨®n de clases. Responde SOLO con JSON v¨¢lido."},
                 {"role":"user","content":prompt_text}
             ],
             max_tokens=int(max_tokens),
             temperature=float(temperature)
         )
         return resp["choices"][0]["message"]["content"]
-    raise RuntimeError("No hay integraciÃ³n: aÃ±ade gemini_client.py o configura OPENAI_API_KEY.")
+    raise RuntimeError("No hay integraci¨®n: a?ade gemini_client.py o configura OPENAI_API_KEY.")
 
 # -------------------------
 # Prompt
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "RESPONDE ÃšNICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves EXACTAS: "
+        "RESPONDE ¨²NICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves EXACTAS: "
         "'destreza','indicador','orientaciones','recursos','evaluacion'. "
         "La subclave 'orientaciones' debe contener: 'anticipacion','construccion','construccion_transversal','consolidacion'. "
-        f"En 'construccion_transversal' incluye UNA actividad relacionada con el Tema de InserciÃ³n: {tema_insercion}. "
-        "NO uses tablas ni HTML ni texto adicional. SOLO JSON vÃ¡lido."
+        f"En 'construccion_transversal' incluye UNA actividad relacionada con el Tema de Inserci¨®n: {tema_insercion}. "
+        "NO uses tablas ni HTML ni texto adicional. SOLO JSON v¨¢lido."
     )
     payload = {"header":{"asignatura":asignatura,"grado":grado,"edad":edad,"tema_insercion":tema_insercion},
                "destrezas":destrezas_list,"instructions":instructions}
@@ -181,14 +181,14 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
 # -------------------------
 # Interfaz
 # -------------------------
-st.subheader("Datos bÃ¡sicos")
+st.subheader("Datos b¨¢sicos")
 c1, c2 = st.columns(2)
 with c1:
     st.text_input("Asignatura", key="asignatura")
     st.text_input("Grado", key="grado")
 with c2:
     st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad")
-    st.text_input("Tema de InserciÃ³n (actividad transversal)", key="tema_insercion")
+    st.text_input("Tema de Inserci¨®n (actividad transversal)", key="tema_insercion")
 
 st.markdown("---")
 st.subheader("Agregar destreza e indicador")
@@ -197,7 +197,7 @@ with st.form(key="form_add_destreza"):
     d = st.text_area("Destreza", key="form_destreza")
     i = st.text_area("Indicador de logro", key="form_indicador")
     t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
-    submitted = st.form_submit_button("âž• Agregar destreza")
+    submitted = st.form_submit_button("? Agregar destreza")
 
     if submitted:
         dd, ii, tt = normalize_text(d), normalize_text(i), normalize_text(t)
@@ -205,12 +205,12 @@ with st.form(key="form_add_destreza"):
             st.warning("Completa la destreza y el indicador antes de agregar.")
         else:
             st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
-            st.success("Destreza agregada âœ…")
-            st.experimental_rerun()
+            st.success("Destreza agregada ?")
+            st.rerun()   # ? corregido
 
 # Mostrar destrezas
 if st.session_state["destrezas"]:
-    st.subheader("Destrezas aÃ±adidas")
+    st.subheader("Destrezas a?adidas")
     st.table(st.session_state["destrezas"])
 
 # -------------------------
@@ -226,7 +226,7 @@ def generar_plan_callback():
     faltantes = []
     if not asig: faltantes.append("Asignatura")
     if not grad: faltantes.append("Grado")
-    if not tema: faltantes.append("Tema de InserciÃ³n")
+    if not tema: faltantes.append("Tema de Inserci¨®n")
     if not dests: faltantes.append("Al menos una destreza")
     if faltantes:
         st.session_state["last_error"] = "Faltan campos: " + ", ".join(faltantes)
@@ -245,19 +245,19 @@ def generar_plan_callback():
         if isinstance(parsed, list):
             st.session_state["plan_parsed"] = parsed
             st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
-            st.success("âœ… Plan generado")
+            st.success("? Plan generado")
         else:
-            st.session_state["last_error"] = "El modelo no devolviÃ³ una lista JSON vÃ¡lida."
+            st.session_state["last_error"] = "El modelo no devolvi¨® una lista JSON v¨¢lida."
     except Exception as e:
         st.session_state["last_error"] = str(e)
 
-st.button("ðŸ“‘ Generar Plan de Clase", on_click=generar_plan_callback)
+st.button("?? Generar Plan de Clase", on_click=generar_plan_callback)
 
 if st.session_state.get("last_error"):
     st.error(st.session_state["last_error"])
 
 if st.session_state.get("plan_parsed"):
-    st.subheader("ðŸ“‹ Vista previa del Plan")
+    st.subheader("?? Vista previa del Plan")
     st.table(st.session_state["plan_parsed"])
 
 if st.session_state.get("plan_raw"):
@@ -267,16 +267,16 @@ if st.session_state.get("plan_raw"):
 if st.session_state.get("doc_bytes"):
     ts = time.strftime("%Y%m%d_%H%M%S")
     st.download_button(
-        "ðŸ’¾ Exportar a Word",
+        "?? Exportar a Word",
         data=st.session_state["doc_bytes"],
         file_name=f"plan_{ts}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-if st.button("ðŸ”„ Nuevo"):
+if st.button("?? Nuevo"):
     for k, v in defaults.items():
         st.session_state[k] = v
-    st.experimental_rerun()
+    st.rerun()   # ? corregido
 
 if debug_mode:
     st.sidebar.subheader("DEBUG session_state")
