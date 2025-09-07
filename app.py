@@ -1,109 +1,82 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (reescrito para evitar pÃ©rdida de inputs)
-Guardar este archivo en UTF-8 (sin BOM).
+app.py - Versi¨®n robusta para asegurar que las destrezas se guarden correctamente.
+Guardar en UTF-8 (sin BOM).
 """
 
 import streamlit as st
 from io import BytesIO
 from docx import Document
-import json
-import os
-import time
-import unicodedata
+import json, os, time, unicodedata
 from typing import List, Dict, Any
 
-# -------------------------
-# ConfiguraciÃ³n de la pÃ¡gina
-# -------------------------
-st.set_page_config(page_title="Generador de Plan de Clase", page_icon="ðŸ“˜", layout="wide")
-st.title("ðŸ“˜ Generador AutomÃ¡tico de Planes de Clase")
+# --- P¨¢gina ---
+st.set_page_config(page_title="Generador de Plan de Clase", page_icon="??", layout="wide")
+st.title("?? Generador Autom¨¢tico de Planes de Clase ¡ª (versi¨®n robusta)")
 
-# -------------------------
-# Sidebar: API / modelo
-# -------------------------
-st.sidebar.header("ConfiguraciÃ³n API / Modelo")
-api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, sÃ³lo si no usas Gemini)", type="password")
+# --- Sidebar / configuraci¨®n ---
+st.sidebar.header("Configuraci¨®n API / Modelo")
+api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, si no usas Gemini)", type="password")
 model_name = st.sidebar.text_input("Modelo OpenAI (ej: gpt-4o-mini) - fallback", value="gpt-4o-mini")
 max_tokens = st.sidebar.number_input("Max tokens", value=1500, step=100)
 temperature = st.sidebar.slider("Temperatura", 0.0, 1.0, 0.2)
-debug_mode = st.sidebar.checkbox("Mostrar debug (valores guardados)", value=False)
+debug_mode = st.sidebar.checkbox("Mostrar debug (session_state)", value=False)
 
 def get_api_key():
     if api_key_input:
         return api_key_input
-    env_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
-    if env_key:
-        return env_key
+    env = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
+    if env:
+        return env
     try:
-        if "OPENAI_API_KEY" in st.secrets:
-            return st.secrets["OPENAI_API_KEY"]
+        return st.secrets["OPENAI_API_KEY"]
     except Exception:
-        pass
-    return None
+        return None
 
 OPENAI_API_KEY = get_api_key()
 
-# -------------------------
-# Intentar cargar gemini_client (no modificar su implementaciÃ³n)
-# -------------------------
+# --- Intento de carga gemini_client (no modificar su l¨®gica) ---
 gemini_client = None
 _has_gemini = False
 try:
-    import gemini_client  # si tienes este archivo en tu repo, serÃ¡ usado
+    import gemini_client
     gemini_client = gemini_client
     _has_gemini = True
 except Exception:
     _has_gemini = False
 
-# -------------------------
-# Inicializar session_state (campos con keys para persistencia)
-# -------------------------
-if "asignatura" not in st.session_state:
-    st.session_state["asignatura"] = ""
-if "grado" not in st.session_state:
-    st.session_state["grado"] = ""
-if "edad" not in st.session_state:
-    st.session_state["edad"] = 12
-if "tema_insercion" not in st.session_state:
-    st.session_state["tema_insercion"] = ""
-# inputs temporales para agregar destrezas
-if "destreza_input" not in st.session_state:
-    st.session_state["destreza_input"] = ""
-if "indicador_input" not in st.session_state:
-    st.session_state["indicador_input"] = ""
-if "tema_estudio_input" not in st.session_state:
-    st.session_state["tema_estudio_input"] = ""
-# lista de destrezas
-if "destrezas" not in st.session_state:
-    st.session_state["destrezas"] = []
-# outputs
-if "plan_raw" not in st.session_state:
-    st.session_state["plan_raw"] = None
-if "plan_parsed" not in st.session_state:
-    st.session_state["plan_parsed"] = None
-if "doc_bytes" not in st.session_state:
-    st.session_state["doc_bytes"] = None
+# --- Inicializar session_state de forma segura ---
+defaults = {
+    "asignatura": "",
+    "grado": "",
+    "edad": 12,
+    "tema_insercion": "",
+    "destrezas": [],
+    "plan_raw": None,
+    "plan_parsed": None,
+    "doc_bytes": None,
+    "last_error": "",
+    "generating": False
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-# -------------------------
-# Utilidades
-# -------------------------
+# --- Utilidades ---
 def normalize_text(s: str) -> str:
-    if s is None:
-        return ""
+    if s is None: return ""
     return unicodedata.normalize("NFKC", str(s)).strip()
 
 def extract_first_json(text: str) -> str:
-    """Extrae el primer JSON (lista u objeto) del texto."""
     if not isinstance(text, str):
         raise ValueError("Texto no es cadena.")
     start = None
     for i, ch in enumerate(text):
-        if ch in ('{', '['):
+        if ch in ("{", "["):
             start = i
             break
     if start is None:
-        raise ValueError("No se encontrÃ³ JSON en el texto.")
+        raise ValueError("No se encontr¨® JSON en el texto.")
     stack = []
     in_string = False
     escape = False
@@ -116,9 +89,9 @@ def extract_first_json(text: str) -> str:
         else:
             escape = False
         if not in_string:
-            if ch in ('{', '['):
+            if ch in ("{", "["):
                 stack.append(ch)
-            elif ch in ('}', ']'):
+            elif ch in ("}", "]"):
                 if not stack:
                     raise ValueError("JSON mal formado.")
                 stack.pop()
@@ -126,60 +99,46 @@ def extract_first_json(text: str) -> str:
                     return text[start:i+1]
     raise ValueError("No se pudo extraer JSON completo.")
 
-def create_docx_from_parsed(parsed_list: List[Dict[str, Any]], asignatura: str, grado: str, edad: Any, tema_insercion: str) -> BytesIO:
+def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, grado: str, edad: Any, tema_insercion: str) -> BytesIO:
     doc = Document()
     doc.add_heading("Plan de Clase", level=1)
-    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de InserciÃ³n: {tema_insercion}")
+    doc.add_paragraph(f"Asignatura: {asignatura} | Grado: {grado} | Edad: {edad} | Tema de Inserci¨®n: {tema_insercion}")
     table = doc.add_table(rows=1, cols=5)
     hdr = table.rows[0].cells
-    hdr[0].text = "Destreza"
-    hdr[1].text = "Indicador"
-    hdr[2].text = "Orientaciones"
-    hdr[3].text = "Recursos (fÃ­sicos)"
-    hdr[4].text = "EvaluaciÃ³n"
+    hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = (
+        "Destreza", "Indicador", "Orientaciones", "Recursos (f¨ªsicos)", "Evaluaci¨®n"
+    )
     for item in parsed_list:
         row = table.add_row().cells
-        row[0].text = str(item.get("destreza", ""))
-        row[1].text = str(item.get("indicador", ""))
-        orient = item.get("orientaciones", {}) or {}
+        row[0].text = str(item.get("destreza",""))
+        row[1].text = str(item.get("indicador",""))
+        orient = item.get("orientaciones",{}) or {}
         parts = []
         if isinstance(orient, dict):
-            if orient.get("anticipacion"):
-                parts.append("AnticipaciÃ³n: " + str(orient.get("anticipacion")))
-            if orient.get("construccion"):
-                parts.append("ConstrucciÃ³n: " + str(orient.get("construccion")))
-            if orient.get("construccion_transversal"):
-                parts.append("Actividad transversal: " + str(orient.get("construccion_transversal")))
-            if orient.get("consolidacion"):
-                parts.append("ConsolidaciÃ³n: " + str(orient.get("consolidacion")))
+            if orient.get("anticipacion"): parts.append("Anticipaci¨®n: " + str(orient["anticipacion"]))
+            if orient.get("construccion"): parts.append("Construcci¨®n: " + str(orient["construccion"]))
+            if orient.get("construccion_transversal"): parts.append("Actividad transversal: " + str(orient["construccion_transversal"]))
+            if orient.get("consolidacion"): parts.append("Consolidaci¨®n: " + str(orient["consolidacion"]))
         row[2].text = "\n".join(parts)
-        recursos = item.get("recursos", [])
-        if isinstance(recursos, list):
-            row[3].text = ", ".join(map(str, recursos))
-        else:
-            row[3].text = str(recursos)
-        row[4].text = str(item.get("evaluacion", ""))
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+        recursos = item.get("recursos",[])
+        row[3].text = ", ".join(map(str, recursos)) if isinstance(recursos, list) else str(recursos)
+        row[4].text = str(item.get("evaluacion",""))
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
-# -------------------------
-# Llamada al modelo (Gemini -> NO modificar la lÃ³gica interna del gemini_client)
-# -------------------------
+# --- Llamar modelo: usa gemini_client si existe (sin modificar su c¨®digo), si no OpenAI ---
 def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.2) -> str:
     if _has_gemini and gemini_client:
-        # Llamamos funciones comunes si existen (sin alterar gemini_client)
-        for fn_name in ("call_gemini", "generate_with_gemini", "request_gemini", "generate", "call", "main", "run"):
-            if hasattr(gemini_client, fn_name):
-                fn = getattr(gemini_client, fn_name)
+        for name in ("call_gemini","generate_with_gemini","request_gemini","generate","call","main","run"):
+            if hasattr(gemini_client, name):
+                fn = getattr(gemini_client, name)
                 try:
                     return fn(prompt_text, max_tokens=max_tokens, temperature=temperature)
                 except TypeError:
-                    # si la firma es diferente, llamamos sÃ³lo con prompt
                     return fn(prompt_text)
-        raise RuntimeError("Se detectÃ³ gemini_client pero no contiene funciÃ³n invocable conocida.")
-    # Fallback OpenAI
+        raise RuntimeError("gemini_client presente pero sin funci¨®n invocable conocida.")
     if OPENAI_API_KEY:
         try:
             import openai
@@ -187,172 +146,153 @@ def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.
             resp = openai.ChatCompletion.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": "Eres un experto en planificaciÃ³n de clases. Responde SOLO con JSON vÃ¡lido."},
-                    {"role": "user", "content": prompt_text}
+                    {"role":"system","content":"Eres un experto en planificaci¨®n de clases. Responde SOLO con JSON v¨¢lido."},
+                    {"role":"user","content":prompt_text}
                 ],
                 max_tokens=int(max_tokens),
                 temperature=float(temperature)
             )
             return resp["choices"][0]["message"]["content"]
         except Exception as e:
-            raise RuntimeError(f"Error fallback OpenAI: {e}")
-    raise RuntimeError("No hay integraciÃ³n disponible. AÃ±ade gemini_client.py o configura OPENAI_API_KEY.")
+            raise RuntimeError(f"Fallback OpenAI fall¨®: {e}")
+    raise RuntimeError("No hay integraci¨®n de modelo: a?ade gemini_client.py o configura OPENAI_API_KEY.")
 
-# -------------------------
-# Prompt reforzado para forzar JSON
-# -------------------------
+# --- Prompt reforzado para forzar JSON limpio ---
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "RESPONDE ÃšNICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves: "
+        "RESPONDE ¨²NICAMENTE CON UN ARRAY JSON. Cada elemento es una destreza con las claves EXACTAS: "
         "'destreza','indicador','orientaciones','recursos','evaluacion'. "
-        "La clave 'orientaciones' debe tener subclaves: 'anticipacion','construccion','construccion_transversal','consolidacion'. "
-        f"EN 'construccion_transversal' incluye UNA actividad relacionada con el Tema de InserciÃ³n: {tema_insercion}. "
-        "NO uses tablas, NO uses HTML, NO agregues texto explicativo. SOLO JSON vÃ¡lido."
+        "La subclave 'orientaciones' debe contener: 'anticipacion','construccion','construccion_transversal','consolidacion'. "
+        f"En 'construccion_transversal' incluye UNA actividad relacionada con el Tema de Inserci¨®n: {tema_insercion}. "
+        "NO uses tablas ni HTML ni texto adicional. SOLO JSON v¨¢lido."
     )
-    payload = {
-        "header": {"asignatura": asignatura, "grado": grado, "edad": edad, "tema_insercion": tema_insercion},
-        "destrezas": destrezas_list,
-        "instructions": instructions
-    }
+    payload = {"header":{"asignatura":asignatura,"grado":grado,"edad":edad,"tema_insercion":tema_insercion},
+               "destrezas":destrezas_list,"instructions":instructions}
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
-# -------------------------
-# Interfaz: Inputs (persistentes mediante 'key')
-# -------------------------
-st.subheader("Datos BÃ¡sicos")
-# Usamos keys para que Streamlit mantenga los valores entre reruns
-asignatura = st.text_input("Asignatura", key="asignatura")
-grado = st.text_input("Grado", key="grado")
-edad = st.number_input("Edad de los estudiantes", min_value=3, max_value=99, value=st.session_state.get("edad",12), key="edad")
-tema_insercion = st.text_input("Tema de InserciÃ³n (actividad transversal)", key="tema_insercion")
+# -------------------------------------------------
+# INTERFAZ
+# -------------------------------------------------
+st.subheader("Datos b¨¢sicos")
+left, right = st.columns(2)
+with left:
+    st.text_input("Asignatura", key="asignatura")
+    st.text_input("Grado", key="grado")
+with right:
+    st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad")
+    st.text_input("Tema de Inserci¨®n (actividad transversal)", key="tema_insercion")
 
 st.markdown("---")
-st.subheader("Agregar Destreza e Indicador (aÃ±adir una por vez)")
-dest_col1, dest_col2 = st.columns([2,1])
-with dest_col1:
-    st.text_area("Destreza (con criterio de desempeÃ±o)", key="destreza_input", height=120)
-with dest_col2:
-    st.text_area("Indicador de logro", key="indicador_input", height=120)
-    st.text_input("Tema de estudio (opcional)", key="tema_estudio_input")
+st.subheader("Agregar una destreza (formulario)")
 
-# BotÃ³n para agregar destreza
-if st.button("âž• Agregar destreza"):
-    d = normalize_text(st.session_state.get("destreza_input",""))
-    i = normalize_text(st.session_state.get("indicador_input",""))
-    t = normalize_text(st.session_state.get("tema_estudio_input",""))
-    if not d or not i:
-        st.warning("Por favor completa la destreza y el indicador antes de agregar.")
-    else:
-        st.session_state["destrezas"].append({"destreza": d, "indicador": i, "tema_estudio": t})
-        # limpiar los campos de entrada para nueva destreza
-        st.session_state["destreza_input"] = ""
-        st.session_state["indicador_input"] = ""
-        st.session_state["tema_estudio_input"] = ""
-        st.success("Destreza agregada âœ…")
+with st.form(key="form_add_destreza"):
+    d = st.text_area("Destreza (con criterio de desempe?o)", key="form_destreza")
+    i = st.text_area("Indicador de logro", key="form_indicador")
+    t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
+    submitted = st.form_submit_button("? Agregar destreza")
+    if submitted:
+        dd = normalize_text(st.session_state.get("form_destreza",""))
+        ii = normalize_text(st.session_state.get("form_indicador",""))
+        tt = normalize_text(st.session_state.get("form_tema_estudio",""))
+        if not dd or not ii:
+            st.warning("Completa la destreza y el indicador antes de agregar.")
+        else:
+            st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
+            # limpiar campos del form
+            st.session_state["form_destreza"] = ""
+            st.session_state["form_indicador"] = ""
+            st.session_state["form_tema_estudio"] = ""
+            st.success("Destreza agregada ?")
+            # Forzar rerun para que la tabla aparezca inmediatamente
+            st.experimental_rerun()
 
-# Mostrar destrezas aÃ±adidas
+# Mostrar n¨²mero de destrezas y la tabla
+st.markdown(f"**Destrezas a?adidas:** {len(st.session_state['destrezas'])}")
 if st.session_state["destrezas"]:
-    st.subheader("Destrezas aÃ±adidas")
     st.table(st.session_state["destrezas"])
 
-# -------------------------
-# BotÃ³n: Generar Plan
-# -------------------------
-def validar_campos(asig, grad, edad_val, tema, dests):
-    faltantes = []
-    if not asig or not str(asig).strip():
-        faltantes.append("Asignatura")
-    if not grad or not str(grad).strip():
-        faltantes.append("Grado")
-    if not tema or not str(tema).strip():
-        faltantes.append("Tema de InserciÃ³n")
-    if not dests or len(dests) == 0:
-        faltantes.append("Al menos una destreza")
-    return faltantes
+# Mostramos error previo si lo hay
+if st.session_state.get("last_error"):
+    st.error(st.session_state["last_error"])
 
-if st.button("ðŸ“‘ Generar Plan de Clase"):
-    # leemos SIEMPRE desde session_state (valores persistentes)
+# -------------------------------------------------
+# Generar plan: usamos callback al hacer click para evitar race conditions
+# -------------------------------------------------
+def generar_plan_callback():
+    st.session_state["last_error"] = ""
     asig = normalize_text(st.session_state.get("asignatura",""))
     grad = normalize_text(st.session_state.get("grado",""))
     edad_val = st.session_state.get("edad",12)
     tema = normalize_text(st.session_state.get("tema_insercion",""))
     dests = st.session_state.get("destrezas", [])
-    faltantes = validar_campos(asig, grad, edad_val, tema, dests)
+    faltantes = []
+    if not asig: faltantes.append("Asignatura")
+    if not grad: faltantes.append("Grado")
+    if not tema: faltantes.append("Tema de Inserci¨®n")
+    if not dests or len(dests)==0: faltantes.append("Al menos una destreza")
     if faltantes:
-        st.error("Faltan campos obligatorios: " + ", ".join(faltantes))
-    else:
-        with st.spinner("Generando plan..."):
-            try:
-                prompt = build_prompt(asig, grad, edad_val, tema, dests)
-                resp_text = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
-                # asegurar cadena utf-8
-                if isinstance(resp_text, bytes):
-                    resp_text = resp_text.decode("utf-8", errors="ignore")
-                else:
-                    resp_text = str(resp_text)
-                resp_text = resp_text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
-                st.session_state["plan_raw"] = resp_text
-                # extraer JSON
-                try:
-                    json_text = extract_first_json(resp_text)
-                    parsed = json.loads(json_text)
-                except Exception as e:
-                    parsed = None
-                    st.error(f"No se pudo parsear JSON: {e}")
-                if parsed and isinstance(parsed, list):
-                    st.session_state["plan_parsed"] = parsed
-                    st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
-                    st.success("âœ… Plan generado con Ã©xito")
-                else:
-                    st.error("El modelo no devolviÃ³ un JSON vÃ¡lido.")
-            except Exception as e:
-                st.error(f"Error al generar plan: {e}")
+        st.session_state["last_error"] = "Faltan campos obligatorios: " + ", ".join(faltantes)
+        return
+    # construimos prompt y llamamos al modelo
+    st.session_state["generating"] = True
+    try:
+        prompt = build_prompt(asig, grad, edad_val, tema, dests)
+        resp_text = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
+        if isinstance(resp_text, bytes):
+            resp_text = resp_text.decode("utf-8", errors="ignore")
+        else:
+            resp_text = str(resp_text)
+        resp_text = resp_text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
+        st.session_state["plan_raw"] = resp_text
+        # extraer JSON
+        try:
+            json_text = extract_first_json(resp_text)
+            parsed = json.loads(json_text)
+        except Exception as e:
+            parsed = None
+            st.session_state["last_error"] = "No se pudo parsear JSON: " + str(e)
+            st.session_state["generating"] = False
+            return
+        if parsed and isinstance(parsed, list):
+            st.session_state["plan_parsed"] = parsed
+            st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
+            st.session_state["generating"] = False
+        else:
+            st.session_state["last_error"] = "El modelo no devolvi¨® una lista JSON v¨¢lida."
+            st.session_state["generating"] = False
+    except Exception as e:
+        st.session_state["last_error"] = "Error generando plan: " + str(e)
+        st.session_state["generating"] = False
 
-# -------------------------
-# Mostrar resultados y descarga
-# -------------------------
+st.button("?? Generar Plan de Clase", on_click=generar_plan_callback)
+
+# Mostrar progreso / resultado
+if st.session_state.get("generating"):
+    st.info("Generando plan... espera unos segundos.")
+
 if st.session_state.get("plan_parsed"):
-    st.subheader("ðŸ“‹ Vista previa del Plan")
+    st.subheader("?? Vista previa del Plan")
     st.table(st.session_state["plan_parsed"])
 
 if st.session_state.get("plan_raw"):
-    with st.expander("Ver JSON / salida bruta"):
+    with st.expander("Ver salida bruta (raw)"):
         st.code(st.session_state["plan_raw"], language="json")
 
 if st.session_state.get("doc_bytes"):
     ts = time.strftime("%Y%m%d_%H%M%S")
-    st.download_button(
-        label="ðŸ’¾ Exportar a Word",
-        data=st.session_state["doc_bytes"],
-        file_name=f"plan_de_clase_{ts}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    st.download_button(label="?? Exportar a Word", data=st.session_state["doc_bytes"],
+                       file_name=f"plan_de_clase_{ts}.docx",
+                       mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
-# BotÃ³n limpiar
-if st.button("ðŸ”„ Nuevo (limpiar todo)"):
-    # conservamos API key y debug, limpiamos lo demÃ¡s
-    keep_api = api_key_input
-    keep_debug = debug_mode
-    st.session_state.clear()
-    # restaurar las claves necesarias en session_state para evitar KeyError
-    st.session_state["asignatura"] = ""
-    st.session_state["grado"] = ""
-    st.session_state["edad"] = 12
-    st.session_state["tema_insercion"] = ""
-    st.session_state["destreza_input"] = ""
-    st.session_state["indicador_input"] = ""
-    st.session_state["tema_estudio_input"] = ""
-    st.session_state["destrezas"] = []
-    st.session_state["plan_raw"] = None
-    st.session_state["plan_parsed"] = None
-    st.session_state["doc_bytes"] = None
-    # recargar la app
+# Bot¨®n limpiar
+if st.button("?? Nuevo (limpiar todo)"):
+    for k in list(st.session_state.keys()):
+        if k in defaults:
+            st.session_state[k] = defaults[k]
     st.experimental_rerun()
 
-# -------------------------
-# Debug (opcional)
-# -------------------------
+# Debug
 if debug_mode:
-    st.sidebar.subheader("DEBUG: session_state")
+    st.sidebar.subheader("DEBUG session_state")
     import pprint
     st.sidebar.text(pprint.pformat(dict(st.session_state)))
