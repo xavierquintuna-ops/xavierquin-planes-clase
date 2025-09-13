@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versi車n final con prompt adaptado)
+app.py - Generador de Plan de Clase (versión final con prompt adaptado)
 """
 
 import streamlit as st
@@ -21,17 +21,17 @@ except Exception:
     _has_gemini = False
 
 # -------------------------
-# Configuraci車n de la p芍gina
+# Configuración de la página
 # -------------------------
 st.set_page_config(page_title="Xavierquin Plan de Clase", page_icon="??", layout="wide")
-st.title("?? Xavierquin Plan de Clase")
+st.title("Xavierquin Plan de Clase")
 
 st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmZyeWRwZmRlbGR3bGw0Z2I3aGFjNGg1emJ1bWd3azNxdnU1bGF6MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26AHOx46iHjG6P7jO/giphy.gif")
 
 # -------------------------
 # Sidebar
 # -------------------------
-st.sidebar.header("Configuraci車n API / Modelo")
+st.sidebar.header("Configuración API / Modelo")
 api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, si no usas Gemini)", type="password")
 model_name = st.sidebar.text_input("Modelo OpenAI (ej: gpt-4o-mini)", value="gpt-4o-mini")
 max_tokens = st.sidebar.number_input("Max tokens", value=2000, step=100)
@@ -52,7 +52,7 @@ def get_api_key():
 OPENAI_API_KEY = get_api_key()
 
 # -------------------------
-# Inicializaci車n session_state
+# Inicialización session_state
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -87,7 +87,7 @@ def extract_first_json(text: str) -> str:
             start = i
             break
     if start is None:
-        raise ValueError("No se encontr車 JSON en el texto.")
+        raise ValueError("No se encontró JSON en el texto.")
     stack, in_string, escape = [], False, False
     for i in range(start, len(text)):
         ch = text[i]
@@ -108,7 +108,7 @@ def extract_first_json(text: str) -> str:
                     return text[start:i+1]
     raise ValueError("No se pudo extraer JSON completo.")
 
-# --- FUNCI車N para generar enlaces de b迆squeda ---
+# --- FUNCIÓN para generar enlaces de b迆squeda ---
 def generate_search_links(keywords: List[str]) -> Dict[str, str]:
     keywords_str = "+".join([normalize_text(k) for k in keywords])
     links = {}
@@ -126,7 +126,7 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
     table = doc.add_table(rows=1, cols=5)
     hdr = table.rows[0].cells
     hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text, hdr[4].text = (
-        "Destreza", "Indicador", "Orientaciones", "Recursos (f赤sicos)", "Evaluaci車n"
+        "Destreza", "Indicador", "Orientaciones", "Recursos (físicos)", "Evaluación"
     )
     for item in parsed_list:
         row = table.add_row().cells
@@ -136,10 +136,10 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
         parts = []
         if isinstance(orient, dict):
             if orient.get("anticipacion"):
-                parts.append("ANTICIPACI車N:\n" + "\n".join(orient["anticipacion"]))
+                parts.append("ANTICIPACIÓN:\n" + "\n".join(orient["anticipacion"]))
             if orient.get("construccion"):
                 c = orient["construccion"]
-                parts.append("CONSTRUCCI車N:\n" + "\n".join(c.get("actividades", [])))
+                parts.append("CONSTRUCCIÓN:\n" + "\n".join(c.get("actividades", [])))
                 if c.get("dua"):
                     parts.append("Actividades DUA:\n" + "\n".join(c["dua"]))
                 gamificacion_keywords = c.get("palabras_clave", [])
@@ -149,7 +149,7 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
                     for k, v in links.items():
                         parts.append(f"?? {k}: {v}")
             if orient.get("consolidacion"):
-                parts.append("CONSOLIDACI車N:\n" + "\n".join(orient["consolidacion"]))
+                parts.append("CONSOLIDACIÓN:\n" + "\n".join(orient["consolidacion"]))
         row[2].text = "\n".join(parts)
         recursos = item.get("recursos",[])
         row[3].text = ", ".join(map(str, recursos)) if isinstance(recursos, list) else str(recursos)
@@ -180,14 +180,14 @@ def call_model(prompt_text: str, max_tokens: int = 2000, temperature: float = 0.
         )
         return resp["choices"][0]["message"]["content"]
     
-    raise RuntimeError("No hay integraci車n: a?ade gemini_client.py o configura OPENAI_API_KEY.")
+    raise RuntimeError("No hay integración: a?ade gemini_client.py o configura OPENAI_API_KEY.")
 
 # -------------------------
 # Prompt adaptado
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "Eres un experto en dise?o curricular y planificaci車n educativa.\n\n"
+        "Eres un experto en dise?o curricular y planificación educativa.\n\n"
         "Genera un plan de clase completo en formato JSON v芍lido. Responde 迆nicamente con un array JSON, sin texto extra.\n\n"
         "### Estructura JSON:\n"
         "Cada objeto del array representa una destreza y debe contener:\n"
@@ -201,16 +201,16 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
         "       - \"palabras_clave\": lista de palabras clave del tema para buscar recursos online\n"
         "   * \"consolidacion\": lista de actividades (cada una inicia con verbo en infinitivo)\n"
         "- \"recursos\": lista de recursos f赤sicos y digitales necesarios (pizarra, cuaderno, computador, proyector, etc.)\n"
-        "- \"evaluacion\": lista de actividades de evaluaci車n relacionadas directamente con el indicador, incluyendo orientaciones DUA\n\n"
+        "- \"evaluacion\": lista de actividades de evaluación relacionadas directamente con el indicador, incluyendo orientaciones DUA\n\n"
         "### Reglas:\n"
-        "- Las secciones deben llevar los t赤tulos: ANTICIPACI車N, CONSTRUCCI車N y CONSOLIDACI車N (en may迆sculas).\n"
+        "- Las secciones deben llevar los títulos: ANTICIPACIÓN, CONSTRUCCIÓN y CONSOLIDACIÓN (en mayúsculas).\n"
         "- Las actividades deben iniciar con verbos en infinitivo (-ar, -er, -ir).\n"
         "- Los recursos online no deben ser inventados; devuelve solo palabras clave en \"palabras_clave\" para generar enlaces.\n"
         "- Responde exclusivamente con JSON v芍lido, sin explicaciones.\n\n"
         f"Asignatura: {asignatura}\n"
         f"Grado: {grado}\n"
         f"Edad: {edad}\n"
-        f"Tema de Inserci車n: {tema_insercion}\n"
+        f"Tema de Inserción: {tema_insercion}\n"
         f"Destrezas: {json.dumps(destrezas_list, ensure_ascii=False, indent=2)}\n"
     )
     return instructions
@@ -218,14 +218,14 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
 # -------------------------
 # Interfaz
 # -------------------------
-st.subheader("Datos b芍sicos")
+st.subheader("Datos básicos")
 c1, c2 = st.columns(2)
 with c1:
     st.text_input("Asignatura", key="asignatura")
     st.text_input("Grado", key="grado")
 with c2:
     st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad")
-    st.text_input("Tema de Inserci車n (actividad transversal)", key="tema_insercion")
+    st.text_input("Tema de Inserción (actividad transversal)", key="tema_insercion")
 
 st.markdown("---")
 st.subheader("Agregar destreza e indicador")
@@ -286,7 +286,7 @@ def generar_plan_callback():
             st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
             st.success("? Plan generado. Despl芍cese hacia abajo para ver el resultado.")
         else:
-            st.session_state["last_error"] = "El modelo no devolvi車 una lista JSON v芍lida."
+            st.session_state["last_error"] = "El modelo no devolvió una lista JSON válida."
     except Exception as e:
         st.session_state["last_error"] = str(e)
 
@@ -302,20 +302,20 @@ if st.session_state.get("plan_parsed"):
     for item in st.session_state["plan_parsed"]:
         st.markdown(f"#### **Destreza:** {item.get('destreza', '')}")
         st.markdown(f"**Indicador:** {item.get('indicador', '')}")
-        st.markdown(f"**Evaluaci車n:** {'; '.join(item.get('evaluacion', []))}")
-        st.markdown(f"**Recursos F赤sicos:** {', '.join(item.get('recursos', []))}")
+        st.markdown(f"**Evaluación:** {'; '.join(item.get('evaluacion', []))}")
+        st.markdown(f"**Recursos Físicos:** {', '.join(item.get('recursos', []))}")
         
         st.markdown("---")
-        st.markdown("### **ORIENTACIONES METODOL車GICAS**")
+        st.markdown("### **ORIENTACIONES METODOLÓGICAS**")
         
         orientaciones = item.get("orientaciones", {})
         
         if "anticipacion" in orientaciones:
-            st.markdown("#### **ANTICIPACI車N**")
+            st.markdown("#### **ANTICIPACIÓN**")
             st.markdown("\n".join(orientaciones["anticipacion"]))
 
         if "construccion" in orientaciones:
-            st.markdown("#### **CONSTRUCCI車N**")
+            st.markdown("#### **CONSTRUCCIÓN**")
             construccion = orientaciones["construccion"]
             st.markdown("\n".join(construccion.get("actividades", [])))
             
@@ -331,13 +331,13 @@ if st.session_state.get("plan_parsed"):
                     st.markdown(f"?? [{name}]({url})")
 
         if "consolidacion" in orientaciones:
-            st.markdown("#### **CONSOLIDACI車N**")
+            st.markdown("#### **CONSOLIDACIÓN**")
             st.markdown("\n".join(orientaciones["consolidacion"]))
 
     st.markdown("---")
 
 if st.session_state.get("plan_raw"):
-    with st.expander("Ver salida bruta (solo para depuraci車n)"):
+    with st.expander("Ver salida bruta (solo para depuración)"):
         st.code(st.session_state["plan_raw"], language="json")
 
 if st.session_state.get("doc_bytes"):
