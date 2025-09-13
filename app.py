@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versión estable y UTF-8, usando st.rerun)
+app.py - Generador de Plan de Clase (versión corregida con enlaces de búsqueda reales)
 """
 
 import streamlit as st
@@ -21,13 +21,12 @@ except Exception:
     _has_gemini = False
 
 # -------------------------
-# Configuracion de la pagina
+# Configuración de la página
 # -------------------------
-st.set_page_config(page_title="Xavierquin Plan de Clase", page_icon="??", layout="wide")
-st.title("?? Xavierquin Plan de Clase")
+st.set_page_config(page_title="Xavierquin Plan de Clase", page_icon="📘", layout="wide")
+st.title("📘 Xavierquin Plan de Clase")
 
-# A?ade el GIF animado
-st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmZyeWRwZmRlbGR3bGw0Z2I3aGFjNGg1emJ1bWd3azNxdnU1bGF6MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26AHOx46iHjG6P7jO/giphy.gif") # Puedes cambiar este GIF por otro que te guste más
+st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmZyeWRwZmRlbGR3bGw0Z2I3aGFjNGg1emJ1bWd3azNxdnU1bGF6MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26AHOx46iHjG6P7jO/giphy.gif")
 
 # -------------------------
 # Sidebar
@@ -53,7 +52,7 @@ def get_api_key():
 OPENAI_API_KEY = get_api_key()
 
 # -------------------------
-# Inicializacion session_state
+# Inicialización session_state
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -109,15 +108,15 @@ def extract_first_json(text: str) -> str:
                     return text[start:i+1]
     raise ValueError("No se pudo extraer JSON completo.")
 
-# --- NUEVA FUNCIóN para generar enlaces de búsqueda ---
-def generate_search_links(keywords: List[str]) -> str:
+# --- FUNCIÓN corregida para generar enlaces de búsqueda ---
+def generate_search_links(keywords: List[str]) -> Dict[str, str]:
     keywords_str = "+".join([normalize_text(k) for k in keywords])
-    links = []
+    links = {}
     if keywords_str:
-        links.enlace_wordwall = f"https://wordwall.net/es-ar/community/{keywords_str}"
-        links.enlace_educaplay = f"https://es.educaplay.com/recursos-educativos/?q={keywords_str}"
-        links.enlace_liveworksheets = f"https://es.liveworksheets.com/worksheets/search/{keywords_str}"
-
+        links["enlace_wordwall"] = f"https://wordwall.net/es-ar/community/{keywords_str}"
+        links["enlace_educaplay"] = f"https://es.educaplay.com/recursos-educativos/?q={keywords_str}"
+        links["enlace_liveworksheets"] = f"https://es.liveworksheets.com/worksheets/search/{keywords_str}"
+        links["enlace_youtube"] = f"https://www.youtube.com/results?search_query={keywords_str}"
     return links
 
 def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, grado: str, edad: Any, tema_insercion: str) -> BytesIO:
@@ -138,19 +137,21 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
         if isinstance(orient, dict):
             if orient.get("anticipacion"): parts.append("Anticipación: " + str(orient["anticipacion"]))
             
-            # --- MODIFICACIóN: Aquí procesamos los recursos gamificados ---
             if orient.get("construccion"):
                 construccion_text = "Construcción: " + orient.get("construccion", {}).get("descripcion", "")
                 parts.append(construccion_text)
-                
-                # Genera los enlaces de búsqueda reales y los a?ade al plan
                 gamificacion_keywords = orient.get("construccion", {}).get("palabras_clave", [])
                 if gamificacion_keywords:
                     links = generate_search_links(gamificacion_keywords)
                     parts.append("\nRecursos de Gamificación (haz clic para buscar):")
-                    parts.append(f"? Wordwall: {links.enlace_wordwall}")
-                    parts.append(f"? Educaplay: {links.enlace_educaplay}")
-                    parts.append(f"? Liveworksheets: {links.enlace_liveworksheets}")
+                    if "enlace_wordwall" in links:
+                        parts.append(f"🔗 Wordwall: {links['enlace_wordwall']}")
+                    if "enlace_educaplay" in links:
+                        parts.append(f"🔗 Educaplay: {links['enlace_educaplay']}")
+                    if "enlace_liveworksheets" in links:
+                        parts.append(f"🔗 Liveworksheets: {links['enlace_liveworksheets']}")
+                    if "enlace_youtube" in links:
+                        parts.append(f"🔗 YouTube: {links['enlace_youtube']}")
 
             if orient.get("construccion_transversal"): parts.append("Actividad transversal: " + str(orient["construccion_transversal"]))
             if orient.get("consolidacion"): parts.append("Consolidación: " + str(orient["consolidacion"]))
@@ -164,11 +165,10 @@ def create_docx_from_parsed(parsed_list: List[Dict[str,Any]], asignatura: str, g
     return buf
 
 # -------------------------
-# Llamada al modelo (Adaptado)
+# Llamada al modelo
 # -------------------------
 def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.2) -> str:
     if _has_gemini:
-        # Llama a la funcion especifica de gemini_client
         return gemini_client.call_gemini(prompt_text, max_tokens=max_tokens, temperature=temperature)
     
     if OPENAI_API_KEY:
@@ -185,41 +185,35 @@ def call_model(prompt_text: str, max_tokens: int = 1500, temperature: float = 0.
         )
         return resp["choices"][0]["message"]["content"]
     
-    raise RuntimeError("No hay integración: a?ade gemini_client.py o configura OPENAI_API_KEY.")
+    raise RuntimeError("No hay integración: añade gemini_client.py o configura OPENAI_API_KEY.")
 
 # -------------------------
-# Prompt (Versión actualizada)
+# Prompt
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "Eres un experto en dise?o curricular y planificación educativa.\n\n"
+        "Eres un experto en diseño curricular y planificación educativa.\n\n"
         "Tu tarea es generar un plan de clase estructurado en formato JSON válido.\n\n"
         "### Instrucciones:\n"
-        "1. Responde **únicamente con un array JSON**.\n"
+        "1. Responde únicamente con un array JSON.\n"
         "2. Cada objeto del array representa una destreza y debe tener las siguientes claves:\n"
-        "   - \"destreza\": Texto de la destreza con criterio de desempe?o.\n"
-        "   - \"indicador\": Texto del indicador de logro.\n"
-        "   - \"orientaciones\": Objeto con las siguientes subclaves:\n"
-        "     * \"anticipacion\": Actividades para activar conocimientos previos (ej. lluvia de ideas, pregunta detonadora, video de YouTube con enlace válido y actual, identificación de ideas principales).\n"
-        "     * \"construccion\": Objeto que represente la actividad de gamificación. Debe tener dos claves:\n"
-        "       - \"descripcion\": Texto que describa brevemente la actividad de gamificación (ej. 'Juego interactivo para emparejar conceptos').\n"
-        "       - \"palabras_clave\": **Lista de 3 a 5 palabras clave** relevantes para la búsqueda de la actividad en plataformas como Educaplay, Wordwall, etc. (ej. ['partes del cuerpo', 'esqueleto humano', 'biología']).\n"
-        "     * \"construccion_transversal\": Incluir **una actividad transversal** relacionada con el Tema de Inserción proporcionado por el usuario.\n"
-        "     * \"consolidacion\": Actividades de aplicación y refuerzo de lo aprendido.\n"
-        "   - \"recursos\": Lista de recursos físicos necesarios (ej. cuaderno, pizarra, marcadores).\n"
-        "   - \"evaluacion\": Texto que describa lo que el estudiante será capaz de realizar después de desarrollar la destreza.\n"
-        "     - Debe comenzar con un verbo en infinitivo (ej. \"escribe un cuento\", \"identifica los lados del triángulo rectángulo\", \"reconoce textos informativos\").\n\n"
+        "   - \"destreza\"\n"
+        "   - \"indicador\"\n"
+        "   - \"orientaciones\": Objeto con subclaves:\n"
+        "     * \"anticipacion\"\n"
+        "     * \"construccion\": {\"descripcion\": ..., \"palabras_clave\": [...]} \n"
+        "     * \"construccion_transversal\"\n"
+        "     * \"consolidacion\"\n"
+        "   - \"recursos\"\n"
+        "   - \"evaluacion\"\n\n"
         "### Reglas:\n"
-        "- No devuelvas explicaciones ni texto adicional fuera del JSON.\n"
-        "- No uses enlaces en el JSON. Solo genera las palabras clave para que la app genere los enlaces de búsqueda.\n"
-        "- No uses tablas, Markdown ni HTML, solo JSON válido.\n\n"
-        "### Contexto:\n"
+        "- No devuelvas enlaces en el JSON. Solo palabras clave.\n"
+        "- Solo JSON válido, sin explicaciones.\n\n"
         f"Asignatura: {asignatura}\n"
         f"Grado: {grado}\n"
-        f"Edad de los estudiantes: {edad}\n"
+        f"Edad: {edad}\n"
         f"Tema de Inserción: {tema_insercion}\n"
-        f"Destrezas: {json.dumps(destrezas_list, ensure_ascii=False, indent=2)}\n\n"
-        "Genera el plan de clase cumpliendo estrictamente estas instrucciones."
+        f"Destrezas: {json.dumps(destrezas_list, ensure_ascii=False, indent=2)}\n"
     )
     return instructions
 
@@ -242,7 +236,7 @@ with st.form(key="form_add_destreza"):
     d = st.text_area("Destreza", key="form_destreza")
     i = st.text_area("Indicador de logro", key="form_indicador")
     t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
-    submitted = st.form_submit_button("? Agregar destreza")
+    submitted = st.form_submit_button("➕ Agregar destreza")
 
     if submitted:
         dd, ii, tt = normalize_text(d), normalize_text(i), normalize_text(t)
@@ -250,12 +244,11 @@ with st.form(key="form_add_destreza"):
             st.warning("Completa la destreza y el indicador antes de agregar.")
         else:
             st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
-            st.success("Destreza agregada ?")
+            st.success("Destreza agregada ✅")
             st.rerun()
 
-# Mostrar destrezas
 if st.session_state["destrezas"]:
-    st.subheader("Destrezas a?adidas")
+    st.subheader("Destrezas añadidas")
     st.table(st.session_state["destrezas"])
 
 # -------------------------
@@ -294,20 +287,20 @@ def generar_plan_callback():
         if isinstance(parsed, list):
             st.session_state["plan_parsed"] = parsed
             st.session_state["doc_bytes"] = create_docx_from_parsed(parsed, asig, grad, edad_val, tema).getvalue()
-            st.success("? Plan generado. Desplácese hacia abajo para ver el resultado.")
+            st.success("✅ Plan generado. Desplácese hacia abajo para ver el resultado.")
         else:
             st.session_state["last_error"] = "El modelo no devolvió una lista JSON válida."
     except Exception as e:
         st.session_state["last_error"] = str(e)
 
-st.button("?? Generar Plan de Clase", on_click=generar_plan_callback)
+st.button("📝 Generar Plan de Clase", on_click=generar_plan_callback)
 
 if st.session_state.get("last_error"):
     st.error(st.session_state["last_error"])
 
 if st.session_state.get("plan_parsed"):
     st.markdown("---")
-    st.subheader("?? Vista previa del Plan")
+    st.subheader("📖 Vista previa del Plan")
 
     for item in st.session_state["plan_parsed"]:
         st.markdown(f"#### **Destreza:** {item.get('destreza', '')}")
@@ -316,18 +309,17 @@ if st.session_state.get("plan_parsed"):
         st.markdown(f"**Recursos Físicos:** {', '.join(item.get('recursos', ''))}")
         
         st.markdown("---")
-        st.markdown("### **ORIENTACIONES METODOLóGICAS**")
+        st.markdown("### **ORIENTACIONES METODOLÓGICAS**")
         
         orientaciones = item.get("orientaciones", {})
         
         if "anticipacion" in orientaciones:
-            st.markdown("#### **ANTICIPACIóN**")
+            st.markdown("#### **ANTICIPACIÓN**")
             st.markdown(orientaciones["anticipacion"])
-            st.markdown(" ") # Salto de línea
-        
+            st.markdown(" ")
+
         if "construccion" in orientaciones:
-            st.markdown("#### **CONSTRUCCIóN**")
-            # --- MODIFICACIóN: Aquí mostramos los enlaces generados ---
+            st.markdown("#### **CONSTRUCCIÓN**")
             construccion = orientaciones["construccion"]
             st.markdown(construccion.get("descripcion", ""))
             
@@ -335,22 +327,26 @@ if st.session_state.get("plan_parsed"):
             if gamificacion_keywords:
                 links = generate_search_links(gamificacion_keywords)
                 st.markdown("**Recursos de Gamificación (haz clic para buscar):**")
-                st.markdown(f"? [Buscar en Wordwall]({links.enlace_wordwall})")
-                st.markdown(f"? [Buscar en Educaplay]({links.enlace_educaplay})")
-                st.markdown(f"? [Buscar en Liveworksheets]({links.enlace_liveworksheets})")
+                if "enlace_wordwall" in links:
+                    st.markdown(f"🔗 [Buscar en Wordwall]({links['enlace_wordwall']})")
+                if "enlace_educaplay" in links:
+                    st.markdown(f"🔗 [Buscar en Educaplay]({links['enlace_educaplay']})")
+                if "enlace_liveworksheets" in links:
+                    st.markdown(f"🔗 [Buscar en Liveworksheets]({links['enlace_liveworksheets']})")
+                if "enlace_youtube" in links:
+                    st.markdown(f"🔗 [Buscar en YouTube]({links['enlace_youtube']})")
 
-            st.markdown(" ") # Salto de línea
+            st.markdown(" ")
 
         if "construccion_transversal" in orientaciones:
-            st.markdown("#### **CONSTRUCCIóN TRANSVERSAL**")
+            st.markdown("#### **CONSTRUCCIÓN TRANSVERSAL**")
             st.markdown(orientaciones["construccion_transversal"])
-            st.markdown(" ") # Salto de línea
+            st.markdown(" ")
 
         if "consolidacion" in orientaciones:
-            st.markdown("#### **CONSOLIDACIóN**")
-            # De nuevo, se muestra el texto plano del modelo.
+            st.markdown("#### **CONSOLIDACIÓN**")
             st.markdown(orientaciones["consolidacion"])
-            st.markdown(" ") # Salto de línea
+            st.markdown(" ")
 
     st.markdown("---")
 
@@ -361,13 +357,13 @@ if st.session_state.get("plan_raw"):
 if st.session_state.get("doc_bytes"):
     ts = time.strftime("%Y%m%d_%H%M%S")
     st.download_button(
-        "?? Exportar a Word",
+        "💾 Exportar a Word",
         data=st.session_state["doc_bytes"],
         file_name=f"plan_{ts}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-if st.button("?? Nuevo"):
+if st.button("🔄 Nuevo"):
     for k, v in defaults.items():
         st.session_state[k] = v
     st.rerun()
