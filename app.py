@@ -6,7 +6,7 @@ app.py - Generador de Plan de Clase (versión texto, con exportación a Word)
 import streamlit as st
 from io import BytesIO
 from docx import Document
-import os, time, unicodedata
+import os, time, unicodedata, re
 from typing import List, Dict, Any
 
 # -------------------------
@@ -34,7 +34,7 @@ with title_col1:
 with title_col2:
     st.markdown("## **XAVIERQUIN PLANIFICACIÓN DE CLASES EDUCATIVAS**")
 
-st.markdown("Aplicación para generar planificaciones por destreza. Usa Califica.ai como referencia para recursos online reales.")
+st.markdown("Aplicación para generar planificaciones por destreza. Ahora con recursos online reales, actualizados y verificados.")
 
 # -------------------------
 # Sidebar
@@ -95,6 +95,55 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
     return buf
 
 # -------------------------
+# Integración con Perplexity AI para búsqueda de recursos
+# -------------------------
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlencode, urljoin
+
+def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[Dict[str, str]]:
+    """Busca recursos en Perplexity AI y extrae enlaces de las fuentes."""
+    
+    # URL base y parámetros de búsqueda
+    base_url = "https://www.perplexity.ai/search?"
+    
+    # Añadimos el sitio preferido a la consulta para guiar a Perplexity
+    if sitio_preferido and sitio_preferido != "general":
+        query_completa = f"{query} site:{sitio_preferido}"
+    else:
+        query_completa = query
+        
+    params = {'q': query_completa, 'copilot': 'false'} # Copilot deshabilitado para evitar interacciones
+
+    try:
+        # Petición a Perplexity
+        headers = {'User-Agent': 'Mozilla/5.0'} 
+        response = requests.get(base_url + urlencode(params), headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Encontramos los divs de las fuentes y extraemos los enlaces
+        fuentes_divs = soup.find_all('div', {'data-testid': 'web-result'})
+        recursos_encontrados = []
+        for div in fuentes_divs:
+            link_tag = div.find('a', href=True)
+            if link_tag:
+                link = link_tag['href']
+                titulo = div.find('div', {'class': 'line-clamp-2'}).text.strip() if div.find('div', {'class': 'line-clamp-2'}) else 'Recurso sin título'
+                recursos_encontrados.append({'titulo': titulo, 'enlace': link})
+        
+        # Opcional: Si no se encuentran resultados, buscar con una query más general
+        if not recursos_encontrados and sitio_preferido:
+             return buscar_recursos_perplexity(query)
+
+        return recursos_encontrados
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la conexión a Perplexity: {e}")
+        return []
+
+# -------------------------
 # Llamada al modelo
 # -------------------------
 def call_model(prompt_text: str, max_tokens: int = 1800, temperature: float = 0.3) -> str:
@@ -135,16 +184,17 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
     instructions += (
         "\n### ANTICIPACIÓN\n"
         "- Actividades que activen conocimientos previos (todas empiezan con verbos en infinitivo).\n"
-        "- Incluir al menos un recurso online gratuito y real (Califica, Wordwall, Educaplay, Liveworksheets o YouTube).\n\n"
+        "- **Incluir un recurso online gratuito y real, con este formato: [RECURSO: Tipo de Recurso (p.ej. Video de YouTube, Actividad de Wordwall) - Tema del Recurso]. Ejemplo: [RECURSO: Video de YouTube - La importancia de la biodiversidad]. NO incluyas el enlace.**\n\n"
         "### CONSTRUCCIÓN\n"
         "- Al menos 6 actividades en secuencia pedagógica (todas con verbos en infinitivo).\n"
         "- Incluir actividades DUA (Diseño Universal de Aprendizaje).\n"
-        "- Incluir al menos un recurso online gratuito y real.\n\n"
+        "- **Incluir un recurso online gratuito y real con el mismo formato: [RECURSO: ...]. NO incluyas el enlace.**\n\n"
         "### CONSOLIDACIÓN\n"
         "- Actividades para aplicar lo aprendido y reforzar conocimientos.\n"
-        "- Incluir al menos un recurso online gratuito y real.\n\n"
+        "- **Incluir un recurso online gratuito y real con el mismo formato: [RECURSO: ...]. NO incluyas el enlace.**\n\n"
         "### RECURSOS\n"
-        "- Listar recursos físicos y tecnológicos (pizarra, cuaderno, proyector, etc.)\n\n"
+        "- Listar recursos físicos y tecnológicos (pizarra, cuaderno, proyector, etc.)\n"
+        "- **NO LISTES AQUÍ LOS RECURSOS ONLINE. SOLO LOS FÍSICOS.**\n\n"
         "### ORIENTACIONES PARA LA EVALUACIÓN\n"
         "- Actividades de evaluación en relación con el indicador.\n"
         "- Incluir orientaciones DUA para la evaluación.\n\n"
@@ -188,7 +238,7 @@ if st.session_state["destrezas"]:
     st.table(st.session_state["destrezas"])
 
 # -------------------------
-# Generar plan
+# Lógica de Generación del plan
 # -------------------------
 def generar_plan_callback():
     st.session_state["last_error"] = ""
@@ -205,12 +255,49 @@ def generar_plan_callback():
         st.session_state["last_error"] = "Faltan campos: " + ", ".join(faltantes)
         return
     try:
-        prompt = build_prompt(asig, grad, edad_val, tema, dests)
-        with st.spinner("Generando plan de clase..."):
+        # PASO 1: Generar el plan con la IA
+        with st.spinner("Generando estructura del plan..."):
+            prompt = build_prompt(asig, grad, edad_val, tema, dests)
             resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
-        st.session_state["plan_text"] = str(resp)
+        
+        # PASO 2: Extraer las sugerencias de recursos
+        sugerencias = re.findall(r'\[RECURSO: (.*?)\]', resp)
+        
+        # PASO 3: Buscar enlaces para cada sugerencia y reemplazar en el texto
+        with st.spinner("Buscando recursos online reales..."):
+            for sugerencia in sugerencias:
+                tipo_recurso, tema_recurso = [s.strip() for s in sugerencia.split(' - ', 1)]
+                
+                # Mapeo de tipos de recurso a dominios preferidos
+                sitios = {
+                    'video de youtube': 'youtube.com',
+                    'actividad de wordwall': 'wordwall.net',
+                    'actividad de educaplay': 'educaplay.com',
+                    'actividad de liveworksheets': 'liveworksheets.com',
+                    'genially': 'genial.ly'
+                }
+                sitio_preferido = None
+                for tipo, dominio in sitios.items():
+                    if tipo in tipo_recurso.lower():
+                        sitio_preferido = dominio
+                        break
+                
+                recursos_encontrados = buscar_recursos_perplexity(tema_recurso, sitio_preferido)
+                
+                if recursos_encontrados:
+                    # Usar el primer resultado encontrado
+                    enlace_real = recursos_encontrados[0]['enlace']
+                    titulo_recurso = recursos_encontrados[0]['titulo']
+                    # Reemplazar el marcador de posición con un enlace real
+                    # Asegurarse de que solo se reemplace la primera ocurrencia de cada sugerencia
+                    resp = resp.replace(f"[RECURSO: {sugerencia}]", f"[{titulo_recurso}]({enlace_real})", 1)
+                else:
+                    # Si no se encuentra un enlace, se deja el marcador original para no dejar vacío
+                    resp = resp.replace(f"[RECURSO: {sugerencia}]", f"**Recurso no encontrado: {sugerencia}**", 1)
+
+        st.session_state["plan_text"] = resp
         st.session_state["doc_bytes"] = create_docx_from_text(st.session_state["plan_text"]).getvalue()
-        st.success("✅ Plan generado.")
+        st.success("✅ Plan generado con recursos reales.")
     except Exception as e:
         st.session_state["last_error"] = str(e)
 

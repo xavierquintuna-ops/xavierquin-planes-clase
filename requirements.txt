@@ -2,3 +2,5 @@ streamlit
 requests
 python-docx
 google-generativeai
+beautifulsoup4
+lxml
