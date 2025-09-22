@@ -9,6 +9,11 @@ from docx import Document
 import os, time, unicodedata, re
 from typing import List, Dict, Any
 
+# Bibliotecas para la búsqueda de recursos online
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlencode
+
 # -------------------------
 # Intento de cargar gemini_client
 # -------------------------
@@ -97,10 +102,6 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
 # -------------------------
 # Integración con Perplexity AI para búsqueda de recursos
 # -------------------------
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlencode, urljoin
-
 def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[Dict[str, str]]:
     """Busca recursos en Perplexity AI y extrae enlaces de las fuentes."""
     
@@ -124,6 +125,7 @@ def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # Encontramos los divs de las fuentes y extraemos los enlaces
+        # La estructura HTML de Perplexity puede cambiar, esta es una aproximación
         fuentes_divs = soup.find_all('div', {'data-testid': 'web-result'})
         recursos_encontrados = []
         for div in fuentes_divs:
@@ -336,4 +338,3 @@ if debug_mode:
     st.sidebar.subheader("DEBUG session_state")
     import pprint
     st.sidebar.text(pprint.pformat(dict(st.session_state)))
-
