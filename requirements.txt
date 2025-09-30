@@ -1,6 +1,8 @@
+# Bibliotecas esenciales para Streamlit y la lógica de la aplicación
 streamlit
-requests
 python-docx
-google-generativeai
+requests
 beautifulsoup4
-lxml
+
+# Biblioteca oficial para la API de Google Gemini
+google-genai 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versión texto, con exportación a Word)
+app.py - Generador de Plan de Clase (versión Gemini con recursos)
 """
 
 import streamlit as st
@@ -9,21 +9,14 @@ from docx import Document
 import os, time, unicodedata, re
 from typing import List, Dict, Any
 
+# Bibliotecas para la IA de Google Gemini
+from google import genai
+from google.genai.errors import APIError
+
 # Bibliotecas para la búsqueda de recursos online
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlencode
-
-# -------------------------
-# Intento de cargar gemini_client
-# -------------------------
-gemini_client = None
-_has_gemini = False
-try:
-    import gemini_client
-    _has_gemini = True
-except Exception:
-    _has_gemini = False
 
 # -------------------------
 # Configuración de la página
@@ -42,27 +35,30 @@ with title_col2:
 st.markdown("Aplicación para generar planificaciones por destreza. Ahora con recursos online reales, actualizados y verificados.")
 
 # -------------------------
-# Sidebar
+# Sidebar - Configuración API / Modelo
 # -------------------------
 st.sidebar.header("Configuración API / Modelo")
-api_key_input = st.sidebar.text_input("OpenAI API Key (opcional, si no usas Gemini)", type="password")
-model_name = st.sidebar.text_input("Modelo OpenAI (ej: gpt-4o-mini)", value="gpt-4o-mini")
-max_tokens = st.sidebar.number_input("Max tokens", value=1800, step=100)
+# Cambiado para solicitar la clave de Gemini
+api_key_input = st.sidebar.text_input("Gemini API Key (o usa st.secrets)", type="password")
+# Cambiado a gemini-2.5-flash (el nombre correcto)
+model_name = st.sidebar.text_input("Modelo Gemini (ej: gemini-2.5-flash)", value="gemini-2.5-flash") 
+max_tokens = st.sidebar.number_input("Max tokens", value=2800, step=100) # Aumentado el límite
 temperature = st.sidebar.slider("Temperatura", 0.0, 1.0, 0.3)
 debug_mode = st.sidebar.checkbox("Mostrar debug (session_state)", value=False)
 
+# Función para obtener la clave API de Gemini
 def get_api_key():
     if api_key_input:
         return api_key_input
-    env = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
+    env = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if env:
         return env
     try:
-        return st.secrets["OPENAI_API_KEY"]
+        return st.secrets["GEMINI_API_KEY"] # Usa st.secrets para producción
     except Exception:
         return None
 
-OPENAI_API_KEY = get_api_key()
+GEMINI_API_KEY = get_api_key()
 
 # -------------------------
 # Inicialización session_state
@@ -101,41 +97,40 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
 
 # -------------------------
 # Integración con Perplexity AI para búsqueda de recursos
+# Se mantiene la función, pero se simplifica la extracción de información
 # -------------------------
 def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[Dict[str, str]]:
-    """Busca recursos en Perplexity AI y extrae enlaces de las fuentes."""
-    
-    # URL base y parámetros de búsqueda
     base_url = "https://www.perplexity.ai/search?"
     
-    # Añadimos el sitio preferido a la consulta para guiar a Perplexity
     if sitio_preferido and sitio_preferido != "general":
         query_completa = f"{query} site:{sitio_preferido}"
     else:
         query_completa = query
         
-    params = {'q': query_completa, 'copilot': 'false'} # Copilot deshabilitado para evitar interacciones
+    params = {'q': query_completa, 'copilot': 'false'}
 
     try:
-        # Petición a Perplexity
         headers = {'User-Agent': 'Mozilla/5.0'} 
         response = requests.get(base_url + urlencode(params), headers=headers, timeout=10)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Encontramos los divs de las fuentes y extraemos los enlaces
-        # La estructura HTML de Perplexity puede cambiar, esta es una aproximación
-        fuentes_divs = soup.find_all('div', {'data-testid': 'web-result'})
+        # Encontrar los resultados de las fuentes. La estructura de Perplexity puede ser volátil.
         recursos_encontrados = []
-        for div in fuentes_divs:
-            link_tag = div.find('a', href=True)
-            if link_tag:
-                link = link_tag['href']
-                titulo = div.find('div', {'class': 'line-clamp-2'}).text.strip() if div.find('div', {'class': 'line-clamp-2'}) else 'Recurso sin título'
-                recursos_encontrados.append({'titulo': titulo, 'enlace': link})
-        
-        # Opcional: Si no se encuentran resultados, buscar con una query más general
+        # Buscamos enlaces de resultados de búsqueda que apunten a fuentes externas
+        for link_tag in soup.find_all('a', href=True):
+            href = link_tag['href']
+            # Filtramos enlaces de fuentes que no sean internos de Perplexity
+            if href.startswith('http') and 'perplexity.ai' not in href:
+                 # Intentamos obtener un título, si no, usamos el enlace como título
+                titulo = link_tag.text.strip() or f"Recurso en {link_tag.find_parent('div').find_parent('div').text.split('...')[0].strip()[:50]}"
+                if not any(r['enlace'] == href for r in recursos_encontrados): # Evita duplicados
+                    recursos_encontrados.append({'titulo': titulo, 'enlace': href})
+                    if len(recursos_encontrados) >= 3: # Detener tras encontrar un número razonable
+                        break
+
+        # Si no se encontraron enlaces específicos con el sitio preferido, intentar con la query general
         if not recursos_encontrados and sitio_preferido:
              return buscar_recursos_perplexity(query)
 
@@ -146,33 +141,42 @@ def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[
         return []
 
 # -------------------------
-# Llamada al modelo
+# Llamada al modelo Gemini
 # -------------------------
-def call_model(prompt_text: str, max_tokens: int = 1800, temperature: float = 0.3) -> str:
-    if _has_gemini:
-        return gemini_client.call_gemini(prompt_text, max_tokens=max_tokens, temperature=temperature)
-    if OPENAI_API_KEY:
-        import openai
-        openai.api_key = OPENAI_API_KEY
-        resp = openai.ChatCompletion.create(
-            model=model_name,
-            messages=[
-                {"role":"system","content":"Eres un experto en planificación de clases."},
-                {"role":"user","content":prompt_text}
-            ],
-            max_tokens=int(max_tokens),
-            temperature=float(temperature)
+def call_model(prompt_text: str, max_tokens: int, temperature: float) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("La clave API de Gemini no está configurada. Por favor, ingrésala en la barra lateral.")
+    
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        config = genai.types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
         )
-        return resp["choices"][0]["message"]["content"]
-    raise RuntimeError("No hay integración: añade gemini_client.py o configura OPENAI_API_KEY.")
+
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[
+                {"role": "user", "parts": [{"text": prompt_text}]}
+            ],
+            config=config,
+        )
+        return response.text
+    
+    except APIError as e:
+        st.error(f"Ocurrió un error con la API de Gemini: {e}. Revisa la clave API y el nombre del modelo ({model_name}).")
+        raise
+    except Exception as e:
+        st.error(f"Error inesperado: {e}")
+        raise
 
 # -------------------------
 # Prompt adaptado para texto
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
-        "Eres un experto en diseño curricular y planificación educativa.\n\n"
-        "Genera un PLAN DE CLASE en ESPAÑOL en formato TEXTO estructurado.\n\n"
+        "Eres un experto en diseño curricular y planificación educativa. Genera un PLAN DE CLASE en ESPAÑOL en formato TEXTO estructurado y detallado. \n\n"
         "📘 **PLAN DE CLASE**\n\n"
         f"Asignatura: {asignatura}\n"
         f"Grado: {grado}\n"
@@ -186,14 +190,14 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
     instructions += (
         "\n### ANTICIPACIÓN\n"
         "- Actividades que activen conocimientos previos (todas empiezan con verbos en infinitivo).\n"
-        "- **Incluir un recurso online gratuito y real, con este formato: [RECURSO: Tipo de Recurso (p.ej. Video de YouTube, Actividad de Wordwall) - Tema del Recurso]. Ejemplo: [RECURSO: Video de YouTube - La importancia de la biodiversidad]. NO incluyas el enlace.**\n\n"
+        "- Sugiere una idea de recurso online que podría usarse en la anticipación. Escribe su descripción entre el marcador **[RECURSO SUGERIDO: ...].**\n\n"
         "### CONSTRUCCIÓN\n"
         "- Al menos 6 actividades en secuencia pedagógica (todas con verbos en infinitivo).\n"
         "- Incluir actividades DUA (Diseño Universal de Aprendizaje).\n"
-        "- **Incluir un recurso online gratuito y real con el mismo formato: [RECURSO: ...]. NO incluyas el enlace.**\n\n"
+        "- Sugiere dos ideas de recursos online, cada una con el marcador **[RECURSO SUGERIDO: ...]**.\n\n"
         "### CONSOLIDACIÓN\n"
         "- Actividades para aplicar lo aprendido y reforzar conocimientos.\n"
-        "- **Incluir un recurso online gratuito y real con el mismo formato: [RECURSO: ...]. NO incluyas el enlace.**\n\n"
+        "- Sugiere una idea de recurso online, con el marcador **[RECURSO SUGERIDO: ...]**.\n\n"
         "### RECURSOS\n"
         "- Listar recursos físicos y tecnológicos (pizarra, cuaderno, proyector, etc.)\n"
         "- **NO LISTES AQUÍ LOS RECURSOS ONLINE. SOLO LOS FÍSICOS.**\n\n"
@@ -205,39 +209,6 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
         "- Devuelve solo TEXTO bien estructurado, no JSON ni código.\n"
     )
     return instructions
-
-# -------------------------
-# Interfaz
-# -------------------------
-st.subheader("Datos básicos")
-c1, c2 = st.columns(2)
-with c1:
-    st.text_input("Asignatura", key="asignatura")
-    st.text_input("Grado", key="grado")
-with c2:
-    st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad")
-    st.text_input("Tema de Inserción (actividad transversal)", key="tema_insercion")
-
-st.markdown("---")
-st.subheader("Agregar destreza e indicador")
-
-with st.form(key="form_add_destreza"):
-    d = st.text_area("Destreza", key="form_destreza")
-    i = st.text_area("Indicador de logro", key="form_indicador")
-    t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
-    submitted = st.form_submit_button("➕ Agregar destreza")
-    if submitted:
-        dd, ii, tt = normalize_text(d), normalize_text(i), normalize_text(t)
-        if not dd or not ii:
-            st.warning("Completa la destreza y el indicador antes de agregar.")
-        else:
-            st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
-            st.success("Destreza agregada ✅")
-            st.rerun()
-
-if st.session_state["destrezas"]:
-    st.subheader("Destrezas añadidas")
-    st.table(st.session_state["destrezas"])
 
 # -------------------------
 # Lógica de Generación del plan
@@ -258,29 +229,32 @@ def generar_plan_callback():
         return
     try:
         # PASO 1: Generar el plan con la IA
-        with st.spinner("Generando estructura del plan..."):
+        with st.spinner("Generando estructura del plan con Gemini..."):
             prompt = build_prompt(asig, grad, edad_val, tema, dests)
             resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
         
         # PASO 2: Extraer las sugerencias de recursos
-        sugerencias = re.findall(r'\[RECURSO: (.*?)\]', resp)
+        # El patrón ahora busca el nuevo marcador [RECURSO SUGERIDO: ...]
+        sugerencias = re.findall(r'\[RECURSO SUGERIDO: (.*?)\]', resp)
         
         # PASO 3: Buscar enlaces para cada sugerencia y reemplazar en el texto
-        with st.spinner("Buscando recursos online reales..."):
+        with st.spinner("Buscando recursos online reales (Perplexity AI)..."):
             for sugerencia in sugerencias:
-                tipo_recurso, tema_recurso = [s.strip() for s in sugerencia.split(' - ', 1)]
+                # El modelo ahora solo da una descripción, no el tipo, así que la búsqueda es general
+                tema_recurso = sugerencia.strip()
                 
-                # Mapeo de tipos de recurso a dominios preferidos
+                # Intentamos clasificar la sugerencia para buscar en un sitio preferido
+                sugerencia_lower = tema_recurso.lower()
                 sitios = {
-                    'video de youtube': 'youtube.com',
+                    'video': 'youtube.com',
                     'actividad de wordwall': 'wordwall.net',
-                    'actividad de educaplay': 'educaplay.com',
-                    'actividad de liveworksheets': 'liveworksheets.com',
+                    'quiz': 'educaplay.com',
+                    'interactiva': 'liveworksheets.com',
                     'genially': 'genial.ly'
                 }
                 sitio_preferido = None
                 for tipo, dominio in sitios.items():
-                    if tipo in tipo_recurso.lower():
+                    if tipo in sugerencia_lower:
                         sitio_preferido = dominio
                         break
                 
@@ -290,12 +264,13 @@ def generar_plan_callback():
                     # Usar el primer resultado encontrado
                     enlace_real = recursos_encontrados[0]['enlace']
                     titulo_recurso = recursos_encontrados[0]['titulo']
+                    
                     # Reemplazar el marcador de posición con un enlace real
                     # Asegurarse de que solo se reemplace la primera ocurrencia de cada sugerencia
-                    resp = resp.replace(f"[RECURSO: {sugerencia}]", f"[{titulo_recurso}]({enlace_real})", 1)
+                    resp = resp.replace(f"[RECURSO SUGERIDO: {sugerencia}]", f"[{titulo_recurso}]({enlace_real})", 1)
                 else:
-                    # Si no se encuentra un enlace, se deja el marcador original para no dejar vacío
-                    resp = resp.replace(f"[RECURSO: {sugerencia}]", f"**Recurso no encontrado: {sugerencia}**", 1)
+                    # Si no se encuentra un enlace, se deja el marcador original como texto
+                    resp = resp.replace(f"[RECURSO SUGERIDO: {sugerencia}]", f"**[RECURSO NO ENCONTRADO: {sugerencia}]**", 1)
 
         st.session_state["plan_text"] = resp
         st.session_state["doc_bytes"] = create_docx_from_text(st.session_state["plan_text"]).getvalue()
