@@ -35,30 +35,18 @@ with title_col2:
 st.markdown("Aplicación para generar planificaciones por destreza. Ahora con recursos online reales, actualizados y verificados.")
 
 # -------------------------
-# Sidebar - Configuración API / Modelo
-# -------------------------
-st.sidebar.header("Configuración API / Modelo")
-# Cambiado para solicitar la clave de Gemini
-api_key_input = st.sidebar.text_input("Gemini API Key (o usa st.secrets)", type="password")
-# Cambiado a gemini-2.5-flash (el nombre correcto)
-model_name = st.sidebar.text_input("Modelo Gemini (ej: gemini-2.5-flash)", value="gemini-2.5-flash") 
-max_tokens = st.sidebar.number_input("Max tokens", value=2800, step=100) # Aumentado el límite
-temperature = st.sidebar.slider("Temperatura", 0.0, 1.0, 0.3)
-debug_mode = st.sidebar.checkbox("Mostrar debug (session_state)", value=False)
-
 # Función para obtener la clave API de Gemini
-def get_api_key():
+# -------------------------
+def get_api_key(api_key_input):
     if api_key_input:
         return api_key_input
     env = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if env:
         return env
     try:
-        return st.secrets["GEMINI_API_KEY"] # Usa st.secrets para producción
+        return st.secrets["GEMINI_API_KEY"]
     except Exception:
         return None
-
-GEMINI_API_KEY = get_api_key()
 
 # -------------------------
 # Inicialización session_state
@@ -72,10 +60,25 @@ defaults = {
     "plan_text": None,
     "doc_bytes": None,
     "last_error": "",
+    "api_key_input": "" # Se añade para inicializar el input de la barra lateral
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+# -------------------------
+# Sidebar - Configuración API / Modelo
+# -------------------------
+st.sidebar.header("Configuración API / Modelo")
+api_key_input = st.sidebar.text_input("Gemini API Key (o usa st.secrets)", 
+                                      type="password", 
+                                      key="api_key_input_sidebar")
+model_name = st.sidebar.text_input("Modelo Gemini (ej: gemini-2.5-flash)", value="gemini-2.5-flash") 
+max_tokens = st.sidebar.number_input("Max tokens", value=2800, step=100)
+temperature = st.sidebar.slider("Temperatura", 0.0, 1.0, 0.3)
+debug_mode = st.sidebar.checkbox("Mostrar debug (session_state)", value=False)
+
+GEMINI_API_KEY = get_api_key(st.session_state["api_key_input_sidebar"])
 
 # -------------------------
 # Utilidades
@@ -96,8 +99,7 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
     return buf
 
 # -------------------------
-# Integración con Perplexity AI para búsqueda de recursos
-# Se mantiene la función, pero se simplifica la extracción de información
+# Integración con Perplexity AI (Se mantiene la lógica para buscar recursos)
 # -------------------------
 def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[Dict[str, str]]:
     base_url = "https://www.perplexity.ai/search?"
@@ -116,28 +118,23 @@ def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Encontrar los resultados de las fuentes. La estructura de Perplexity puede ser volátil.
         recursos_encontrados = []
-        # Buscamos enlaces de resultados de búsqueda que apunten a fuentes externas
         for link_tag in soup.find_all('a', href=True):
             href = link_tag['href']
-            # Filtramos enlaces de fuentes que no sean internos de Perplexity
             if href.startswith('http') and 'perplexity.ai' not in href:
-                 # Intentamos obtener un título, si no, usamos el enlace como título
                 titulo = link_tag.text.strip() or f"Recurso en {link_tag.find_parent('div').find_parent('div').text.split('...')[0].strip()[:50]}"
-                if not any(r['enlace'] == href for r in recursos_encontrados): # Evita duplicados
+                if not any(r['enlace'] == href for r in recursos_encontrados):
                     recursos_encontrados.append({'titulo': titulo, 'enlace': href})
-                    if len(recursos_encontrados) >= 3: # Detener tras encontrar un número razonable
+                    if len(recursos_encontrados) >= 3:
                         break
 
-        # Si no se encontraron enlaces específicos con el sitio preferido, intentar con la query general
         if not recursos_encontrados and sitio_preferido:
              return buscar_recursos_perplexity(query)
 
         return recursos_encontrados
 
     except requests.exceptions.RequestException as e:
-        print(f"Error en la conexión a Perplexity: {e}")
+        st.info(f"Advertencia: Error al buscar recursos online. Se continuará con la generación del plan. Error: {e}")
         return []
 
 # -------------------------
@@ -211,6 +208,40 @@ def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, de
     return instructions
 
 # -------------------------
+# Interfaz - Datos básicos (Aseguramos su visibilidad)
+# -------------------------
+st.subheader("Datos básicos")
+c1, c2 = st.columns(2)
+with c1:
+    # Aseguramos que los valores iniciales provengan de session_state
+    st.text_input("Asignatura", key="asignatura", value=st.session_state["asignatura"])
+    st.text_input("Grado", key="grado", value=st.session_state["grado"])
+with c2:
+    st.number_input("Edad de los estudiantes", min_value=3, max_value=99, key="edad", value=st.session_state["edad"])
+    st.text_input("Tema de Inserción (actividad transversal)", key="tema_insercion", value=st.session_state["tema_insercion"])
+
+st.markdown("---")
+st.subheader("Agregar destreza e indicador")
+
+with st.form(key="form_add_destreza"):
+    d = st.text_area("Destreza", key="form_destreza")
+    i = st.text_area("Indicador de logro", key="form_indicador")
+    t = st.text_input("Tema de estudio (opcional)", key="form_tema_estudio")
+    submitted = st.form_submit_button("➕ Agregar destreza")
+    if submitted:
+        dd, ii, tt = normalize_text(d), normalize_text(i), normalize_text(t)
+        if not dd or not ii:
+            st.warning("Completa la destreza y el indicador antes de agregar.")
+        else:
+            st.session_state["destrezas"].append({"destreza": dd, "indicador": ii, "tema_estudio": tt})
+            st.success("Destreza agregada ✅")
+            st.rerun()
+
+if st.session_state["destrezas"]:
+    st.subheader("Destrezas añadidas")
+    st.table(st.session_state["destrezas"])
+
+# -------------------------
 # Lógica de Generación del plan
 # -------------------------
 def generar_plan_callback():
@@ -234,16 +265,13 @@ def generar_plan_callback():
             resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
         
         # PASO 2: Extraer las sugerencias de recursos
-        # El patrón ahora busca el nuevo marcador [RECURSO SUGERIDO: ...]
         sugerencias = re.findall(r'\[RECURSO SUGERIDO: (.*?)\]', resp)
         
         # PASO 3: Buscar enlaces para cada sugerencia y reemplazar en el texto
         with st.spinner("Buscando recursos online reales (Perplexity AI)..."):
             for sugerencia in sugerencias:
-                # El modelo ahora solo da una descripción, no el tipo, así que la búsqueda es general
                 tema_recurso = sugerencia.strip()
                 
-                # Intentamos clasificar la sugerencia para buscar en un sitio preferido
                 sugerencia_lower = tema_recurso.lower()
                 sitios = {
                     'video': 'youtube.com',
@@ -261,15 +289,11 @@ def generar_plan_callback():
                 recursos_encontrados = buscar_recursos_perplexity(tema_recurso, sitio_preferido)
                 
                 if recursos_encontrados:
-                    # Usar el primer resultado encontrado
                     enlace_real = recursos_encontrados[0]['enlace']
                     titulo_recurso = recursos_encontrados[0]['titulo']
                     
-                    # Reemplazar el marcador de posición con un enlace real
-                    # Asegurarse de que solo se reemplace la primera ocurrencia de cada sugerencia
                     resp = resp.replace(f"[RECURSO SUGERIDO: {sugerencia}]", f"[{titulo_recurso}]({enlace_real})", 1)
                 else:
-                    # Si no se encuentra un enlace, se deja el marcador original como texto
                     resp = resp.replace(f"[RECURSO SUGERIDO: {sugerencia}]", f"**[RECURSO NO ENCONTRADO: {sugerencia}]**", 1)
 
         st.session_state["plan_text"] = resp
@@ -304,10 +328,16 @@ if st.session_state.get("doc_bytes"):
     )
 
 # Nuevo / reiniciar
-if st.button("🔄 Nuevo"):
+def reset_app():
     for k, v in defaults.items():
         st.session_state[k] = v
+    # Preservar la clave API si fue ingresada manualmente
+    if "api_key_input_sidebar" in st.session_state:
+        st.session_state["api_key_input"] = st.session_state["api_key_input_sidebar"]
     st.rerun()
+
+if st.button("🔄 Nuevo"):
+    reset_app()
 
 if debug_mode:
     st.sidebar.subheader("DEBUG session_state")
