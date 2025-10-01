@@ -1,22 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versión Gemini con recursos)
+app.py - Generador de Plan de Clase (versión fija con API en código y exportación a Word)
 """
 
 import streamlit as st
 from io import BytesIO
 from docx import Document
-import os, time, unicodedata, re
+import time, unicodedata
 from typing import List, Dict, Any
 
-# Bibliotecas para la IA de Google Gemini
+# -------------------------
+# Configuración fija de la API Gemini
+# -------------------------
 from google import genai
 from google.genai.errors import APIError
 
-# Bibliotecas para la búsqueda de recursos online
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlencode
+# 👇 Pega aquí tu API Key real
+GEMINI_API_KEY = "TU_API_KEY_AQUI"
+
+# Modelo por defecto
+MODEL_NAME = "gemini-2.5-flash"
+MAX_TOKENS = 2800
+TEMPERATURE = 0.3
 
 # -------------------------
 # Configuración de la página
@@ -25,28 +30,11 @@ st.set_page_config(page_title="XAVIERQUIN PLANIFICACIÓN DE CLASES EDUCATIVAS",
                    page_icon="📘",
                    layout="wide")
 
-# Title with image (left) and text (right)
-title_col1, title_col2 = st.columns([1, 6])
-with title_col1:
-    st.image("https://img.icons8.com/fluency/96/000000/lesson-planner.png", width=72)
-with title_col2:
-    st.markdown("## **XAVIERQUIN PLANIFICACIÓN DE CLASES EDUCATIVAS**")
-
+st.markdown("## 📘 XAVIERQUIN PLANIFICACIÓN DE CLASES EDUCATIVAS")
 st.markdown("Aplicación para generar planificaciones por destreza.")
 
 # -------------------------
-# Configuración fija de la API
-# -------------------------
-# 👇 Pega aquí tu API Key de Gemini
-GEMINI_API_KEY = "AIzaSyB63V1035g-gaZ_KNKAajyjezxnNcJTZW0"
-
-# Modelo por defecto
-model_name = "gemini-2.5-flash"
-max_tokens = 2800
-temperature = 0.3
-
-# -------------------------
-# Inicialización session_state
+# Inicialización de session_state
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -81,75 +69,32 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
     return buf
 
 # -------------------------
-# Integración con Perplexity AI (para buscar recursos online)
-# -------------------------
-def buscar_recursos_perplexity(query: str, sitio_preferido: str = None) -> List[Dict[str, str]]:
-    base_url = "https://www.perplexity.ai/search?"
-    
-    if sitio_preferido and sitio_preferido != "general":
-        query_completa = f"{query} site:{sitio_preferido}"
-    else:
-        query_completa = query
-        
-    params = {'q': query_completa, 'copilot': 'false'}
-
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'} 
-        response = requests.get(base_url + urlencode(params), headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        recursos_encontrados = []
-        for link_tag in soup.find_all('a', href=True):
-            href = link_tag['href']
-            if href.startswith('http') and 'perplexity.ai' not in href:
-                titulo = link_tag.text.strip() or "Recurso"
-                if not any(r['enlace'] == href for r in recursos_encontrados):
-                    recursos_encontrados.append({'titulo': titulo, 'enlace': href})
-                    if len(recursos_encontrados) >= 3:
-                        break
-
-        if not recursos_encontrados and sitio_preferido:
-             return buscar_recursos_perplexity(query)
-
-        return recursos_encontrados
-
-    except requests.exceptions.RequestException as e:
-        st.info(f"Advertencia: Error al buscar recursos online. Se continuará con la generación del plan. Error: {e}")
-        return []
-
-# -------------------------
 # Llamada al modelo Gemini
 # -------------------------
-def call_model(prompt_text: str, max_tokens: int, temperature: float) -> str:
+def call_model(prompt_text: str) -> str:
     if not GEMINI_API_KEY:
         raise RuntimeError("La clave API de Gemini no está configurada en el código.")
-    
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        
         config = genai.types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
+            temperature=TEMPERATURE,
+            max_output_tokens=MAX_TOKENS,
         )
-
         response = client.models.generate_content(
-            model=model_name,
+            model=MODEL_NAME,
             contents=[{"role": "user", "parts": [{"text": prompt_text}]}],
             config=config,
         )
         return response.text
-    
     except APIError as e:
-        st.error(f"Ocurrió un error con la API de Gemini: {e}. Revisa la clave API y el nombre del modelo ({model_name}).")
+        st.error(f"Error con la API de Gemini: {e}")
         raise
     except Exception as e:
         st.error(f"Error inesperado: {e}")
         raise
 
 # -------------------------
-# Prompt adaptado para texto
+# Prompt para el plan de clase
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
     instructions = (
@@ -226,9 +171,9 @@ def generar_plan_callback():
         st.session_state["last_error"] = "Faltan campos obligatorios."
         return
     try:
-        with st.spinner("Generando estructura del plan con Gemini..."):
+        with st.spinner("Generando plan con Gemini..."):
             prompt = build_prompt(asig, grad, edad_val, tema, dests)
-            resp = call_model(prompt, max_tokens=max_tokens, temperature=temperature)
+            resp = call_model(prompt)
         
         st.session_state["plan_text"] = resp
         st.session_state["doc_bytes"] = create_docx_from_text(resp).getvalue()
@@ -242,4 +187,32 @@ if st.session_state.get("last_error"):
     st.error(st.session_state["last_error"])
 
 # -------------------------
-#
+# Vista previa del Plan generado
+# -------------------------
+if st.session_state.get("plan_text"):
+    st.markdown("---")
+    st.subheader("📖 Vista previa del Plan")
+    st.markdown(st.session_state["plan_text"])
+
+# -------------------------
+# Exportar a Word
+# -------------------------
+if st.session_state.get("doc_bytes"):
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        "💾 Exportar a Word",
+        data=st.session_state["doc_bytes"],
+        file_name=f"plan_{ts}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+# -------------------------
+# Reiniciar
+# -------------------------
+def reset_app():
+    for k, v in defaults.items():
+        st.session_state[k] = v
+    st.rerun()
+
+if st.button("🔄 Nuevo"):
+    reset_app()
