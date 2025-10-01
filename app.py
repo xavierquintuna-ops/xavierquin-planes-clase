@@ -17,7 +17,7 @@ from google import genai
 from google.genai.errors import APIError
 
 # 👇 Pega aquí tu API Key real
-GEMINI_API_KEY = "TU_API_KEY_AQUI"
+GEMINI_API_KEY = "AIzaSyDFCWh7VtmdJrwnQRUY0zK2jpliv5fAmhM"
 
 # Modelo por defecto
 MODEL_NAME = "gemini-2.5-flash"
