@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Generador de Plan de Clase (versión fija con API en código y exportación a Word)
+app.py - Generador de Plan de Clase (Gemini, exportación Word + Excel)
 """
 
 import streamlit as st
@@ -8,6 +8,7 @@ from io import BytesIO
 from docx import Document
 import time, unicodedata
 from typing import List, Dict, Any
+import pandas as pd
 
 # -------------------------
 # Configuración fija de la API Gemini
@@ -44,6 +45,7 @@ defaults = {
     "destrezas": [],
     "plan_text": None,
     "doc_bytes": None,
+    "excel_bytes": None,
     "last_error": ""
 }
 for k, v in defaults.items():
@@ -65,6 +67,23 @@ def create_docx_from_text(plan_text: str) -> BytesIO:
             doc.add_paragraph(line)
     buf = BytesIO()
     doc.save(buf)
+    buf.seek(0)
+    return buf
+
+def create_excel_from_plan(destrezas: List[Dict[str,str]], plan_text: str) -> BytesIO:
+    # Genera un Excel con columnas básicas
+    rows = []
+    for d in destrezas:
+        rows.append({
+            "DESTREZA": d["destreza"],
+            "INDICADOR": d["indicador"],
+            "TEMA": d.get("tema_estudio", ""),
+            "PLAN DE CLASE": plan_text
+        })
+    df = pd.DataFrame(rows)
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Planificacion")
     buf.seek(0)
     return buf
 
@@ -94,34 +113,66 @@ def call_model(prompt_text: str) -> str:
         raise
 
 # -------------------------
-# Prompt para el plan de clase
+# Prompt para el plan de clase (condición Inglés)
 # -------------------------
 def build_prompt(asignatura: str, grado: str, edad: Any, tema_insercion: str, destrezas_list: List[Dict[str,str]]) -> str:
-    instructions = (
-        "Eres un experto en diseño curricular y planificación educativa. Genera un PLAN DE CLASE en ESPAÑOL en formato TEXTO estructurado y detallado. \n\n"
-        f"Asignatura: {asignatura}\n"
-        f"Grado: {grado}\n"
-        f"Edad: {edad}\n"
-        f"Tema de Inserción: {tema_insercion}\n\n"
-        "### DESTREZAS E INDICADORES\n"
-    )
-    for d in destrezas_list:
-        instructions += f"- Destreza: {d['destreza']} | Indicador: {d['indicador']}\n"
+    is_english = asignatura.strip().lower() in ["ingles", "inglés", "english"]
 
-    instructions += (
-        "\n### ANTICIPACIÓN\n"
-        "- Actividades que activen conocimientos previos (todas empiezan con verbos en infinitivo).\n\n"
-        "### CONSTRUCCIÓN\n"
-        "- Al menos 6 actividades en secuencia pedagógica (todas con verbos en infinitivo).\n"
-        "- Incluir actividades DUA (Diseño Universal de Aprendizaje).\n\n"
-        "### CONSOLIDACIÓN\n"
-        "- Actividades para aplicar lo aprendido y reforzar conocimientos.\n\n"
-        "### RECURSOS\n"
-        "- Listar recursos físicos y tecnológicos (pizarra, cuaderno, proyector, etc.)\n\n"
-        "### ORIENTACIONES PARA LA EVALUACIÓN\n"
-        "- Actividades de evaluación en relación con el indicador.\n"
-        "- Incluir orientaciones DUA para la evaluación.\n\n"
-    )
+    if is_english:
+        instructions = (
+            "You are an expert in curriculum design and lesson planning. Generate a LESSON PLAN in U.S. ENGLISH "
+            "with clear, structured, and detailed text. \n\n"
+            f"Subject: {asignatura}\n"
+            f"Grade: {grado}\n"
+            f"Age: {edad}\n"
+            f"Transversal Topic: {tema_insercion}\n\n"
+            "### SKILLS AND INDICATORS\n"
+        )
+        for d in destrezas_list:
+            instructions += f"- Skill: {d['destreza']} | Indicator: {d['indicador']}\n"
+
+        instructions += (
+            "\n### ANTICIPATION\n"
+            "- Activities that activate prior knowledge (all must start with verbs in infinitive form).\n\n"
+            "### CONSTRUCTION\n"
+            "- At least 6 sequenced activities (all starting with verbs in infinitive form).\n"
+            "- Include UDL (Universal Design for Learning) activities.\n\n"
+            "### CONSOLIDATION\n"
+            "- Activities to apply and reinforce knowledge.\n\n"
+            "### RESOURCES\n"
+            "- List physical and technological resources (board, notebook, projector, etc.)\n\n"
+            "### EVALUATION GUIDELINES\n"
+            "- Evaluation activities aligned with the indicator.\n"
+            "- Include UDL strategies for evaluation.\n\n"
+        )
+    else:
+        instructions = (
+            "Eres un experto en diseño curricular y planificación educativa. Genera un PLAN DE CLASE en ESPAÑOL "
+            "en formato TEXTO estructurado y detallado. \n\n"
+            f"Asignatura: {asignatura}\n"
+            f"Grado: {grado}\n"
+            f"Edad: {edad}\n"
+            f"Tema de Inserción: {tema_insercion}\n\n"
+            "### DESTREZAS E INDICADORES\n"
+        )
+        for d in destrezas_list:
+            instructions += f"- Destreza: {d['destreza']} | Indicador: {d['indicador']}\n"
+
+        instructions += (
+            "\n### ANTICIPACIÓN\n"
+            "- Actividades que activen conocimientos previos (todas empiezan con verbos en infinitivo).\n\n"
+            "### CONSTRUCCIÓN\n"
+            "- Al menos 6 actividades en secuencia pedagógica (todas con verbos en infinitivo).\n"
+            "- Incluir actividades DUA (Diseño Universal de Aprendizaje).\n\n"
+            "### CONSOLIDACIÓN\n"
+            "- Actividades para aplicar lo aprendido y reforzar conocimientos.\n\n"
+            "### RECURSOS\n"
+            "- Listar recursos físicos y tecnológicos (pizarra, cuaderno, proyector, etc.)\n\n"
+            "### ORIENTACIONES PARA LA EVALUACIÓN\n"
+            "- Actividades de evaluación en relación con el indicador.\n"
+            "- Incluir orientaciones DUA para la evaluación.\n\n"
+        )
+
     return instructions
 
 # -------------------------
@@ -177,6 +228,7 @@ def generar_plan_callback():
         
         st.session_state["plan_text"] = resp
         st.session_state["doc_bytes"] = create_docx_from_text(resp).getvalue()
+        st.session_state["excel_bytes"] = create_excel_from_plan(dests, resp).getvalue()
         st.success("✅ Plan generado con éxito.")
     except Exception as e:
         st.session_state["last_error"] = str(e)
@@ -195,7 +247,7 @@ if st.session_state.get("plan_text"):
     st.markdown(st.session_state["plan_text"])
 
 # -------------------------
-# Exportar a Word
+# Exportar a Word y Excel
 # -------------------------
 if st.session_state.get("doc_bytes"):
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -204,6 +256,15 @@ if st.session_state.get("doc_bytes"):
         data=st.session_state["doc_bytes"],
         file_name=f"plan_{ts}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+if st.session_state.get("excel_bytes"):
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        "📊 Exportar a Excel",
+        data=st.session_state["excel_bytes"],
+        file_name=f"plan_{ts}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 # -------------------------
