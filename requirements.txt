@@ -3,6 +3,8 @@ streamlit
 python-docx
 requests
 beautifulsoup4
+matplotlib
+
 
 # Biblioteca oficial para la API de Google Gemini
 google-genai 
