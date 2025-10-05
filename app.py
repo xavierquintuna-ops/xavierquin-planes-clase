@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py - Planificador Educativo Profesional
+app.py - Planificador Educativo Inteligente (Versión Octubre 2025)
 Autor: Mgs. Xavier Quintuña C.
 """
 
@@ -22,7 +22,7 @@ from google.genai.errors import APIError
 GEMINI_API_KEY = "AIzaSyC0FOYvSIwW2WEePc4ks_dB6WdHyVBvmy0"  # ⚠️ Reemplaza con tu clave real antes de desplegar
 MODEL_NAME = "gemini-2.5-flash"
 MAX_TOKENS = 2800
-TEMPERATURE = 0.3
+TEMPERATURE = 0.4
 
 # -------------------------
 # Configuración de página
@@ -42,19 +42,16 @@ frases_docentes = [
 frase_motivadora = random.choice(frases_docentes)
 
 # -------------------------
-# CSS personalizado
+# CSS Profesional
 # -------------------------
 custom_css = f"""
 <style>
-/* Fondo y fuente general */
 .stApp {{
     background: linear-gradient(135deg, #eef4ff, #ffffff);
     color: #000000;
     font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     padding-top: 10px;
 }}
-
-/* Banner principal */
 .banner {{
     position: relative;
     height: 230px;
@@ -80,8 +77,6 @@ custom_css = f"""
     margin-top: 10px;
     font-style: italic;
 }}
-
-/* Ondas animadas */
 .wave {{
     position: absolute;
     bottom: 0;
@@ -105,15 +100,11 @@ custom_css = f"""
     0% {{ transform: translateX(0); }}
     100% {{ transform: translateX(-25%); }}
 }}
-
-/* Etiquetas de campos */
 .stTextInput label, .stTextArea label, .stNumberInput label {{
     color: #000000 !important;
     font-weight: 600 !important;
     font-size: 15px !important;
 }}
-
-/* Campos de texto */
 .stTextInput > div > div > input,
 .stTextArea textarea {{
     border: 1px solid #1a73e8 !important;
@@ -122,15 +113,11 @@ custom_css = f"""
     color: #000000 !important;
     padding: 8px !important;
 }}
-
-/* Subtítulos */
 h3, .stSubheader {{
     color: #1a73e8 !important;
     font-weight: 700 !important;
     text-shadow: 0.5px 0.5px 1px rgba(0,0,0,0.1);
 }}
-
-/* Botones */
 button, .stButton>button {{
     background: linear-gradient(135deg, #1a73e8, #3a86ff) !important;
     color: white !important;
@@ -144,13 +131,6 @@ button:hover, .stButton>button:hover {{
     background: linear-gradient(135deg, #1557b0, #2c6de2) !important;
     transform: scale(1.02);
 }}
-
-/* Alertas y mensajes */
-.stAlert {{
-    border-radius: 10px !important;
-}}
-
-/* Firma inferior */
 .footer {{
     margin-top: 40px;
     text-align: center;
@@ -180,7 +160,7 @@ button:hover, .stButton>button:hover {{
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # -------------------------
-# Inicialización
+# Estado de sesión
 # -------------------------
 defaults = {
     "asignatura": "",
@@ -197,13 +177,13 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # -------------------------
-# Funciones
+# Funciones auxiliares
 # -------------------------
 def normalize_text(s): return unicodedata.normalize("NFKC", str(s or "")).strip()
 
 def create_docx_from_text(plan_text):
     doc = Document()
-    doc.add_heading("Plan de Clase", level=1)
+    doc.add_heading("PLAN DE CLASE", level=1)
     for line in plan_text.split("\n"):
         if line.strip():
             doc.add_paragraph(line)
@@ -212,6 +192,17 @@ def create_docx_from_text(plan_text):
     buf.seek(0)
     return buf
 
+def create_excel_from_plan(plan_text):
+    df = pd.DataFrame({"Plan de Clase": [plan_text]})
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Planificación")
+    buf.seek(0)
+    return buf
+
+# -------------------------
+# IA - Gemini
+# -------------------------
 def call_model(prompt_text: str) -> str:
     if not GEMINI_API_KEY or GEMINI_API_KEY == "TU_API_KEY_AQUI":
         raise RuntimeError("⚠️ La clave API de Gemini no está configurada.")
@@ -224,14 +215,47 @@ def call_model(prompt_text: str) -> str:
     )
     return response.text
 
+# -------------------------
+# PROMPT EDUCATIVO
+# -------------------------
 def build_prompt(asignatura, grado, edad, tema_insercion, destrezas_list):
-    text = (
-        f"Eres experto en planificación educativa. Genera un PLAN DE CLASE estructurado y práctico en español.\n"
-        f"Asignatura: {asignatura}\nGrado: {grado}\nEdad: {edad}\nTema de Inserción: {tema_insercion}\n\n"
-    )
+    prompt = f"""
+Eres un Agente Educativo IA especializado en elaborar planificaciones de clase inclusivas y estructuradas.
+Tu tarea es generar un plan de clase en formato de MATRIZ con 5 columnas:
+
+1️⃣ DESTREZA  
+2️⃣ INDICADOR  
+3️⃣ ORIENTACIONES METODOLÓGICAS (incluir momentos: ANTICIPACIÓN, CONSTRUCCIÓN y CONSOLIDACIÓN)  
+4️⃣ RECURSOS (solo una lista general para toda la clase)  
+5️⃣ ORIENTACIONES PARA LA EVALUACIÓN (coherentes con el indicador y adaptadas a NEE)
+
+📚 Información base:
+Asignatura: {asignatura}
+Grado: {grado}
+Edad de los estudiantes: {edad}
+Tema de Inserción o Transversal: {tema_insercion}
+
+Destrezas a planificar:
+"""
     for d in destrezas_list:
-        text += f"- Destreza: {d.get('destreza','')} | Indicador: {d.get('indicador','')}\n"
-    return text
+        prompt += f"- Destreza: {d.get('destreza','')} | Indicador: {d.get('indicador','')} | Tema: {d.get('tema_estudio','')}\n"
+
+    prompt += """
+🎯 Instrucciones específicas:
+- Cada actividad debe iniciar con un verbo en infinitivo (ar, er, ir).
+- Usa un lenguaje claro, práctico y profesional.
+- Organiza las orientaciones metodológicas bajo los tres momentos:
+  🔹 ANTICIPACIÓN → Actividades breves que activen conocimientos previos.
+  🔹 CONSTRUCCIÓN → Actividades secuenciales bajo el enfoque DUA.
+  🔹 CONSOLIDACIÓN → Actividades para aplicar y reforzar lo aprendido.
+- Enumera o estructura las actividades para facilitar lectura.
+- Presenta el resultado final en una MATRIZ con las 5 columnas mencionadas.
+- Si la asignatura es INGLÉS, traduce todo al idioma inglés, manteniendo la estructura.
+
+Salida esperada:  
+Una tabla clara en formato texto, con las 5 columnas bien delimitadas.
+    """
+    return prompt
 
 # -------------------------
 # Interfaz
@@ -249,7 +273,7 @@ st.markdown("---")
 st.subheader("➕ Agregar destrezas e indicadores")
 
 with st.form(key="form_add_destreza"):
-    d = st.text_area("Destreza")
+    d = st.text_area("Destreza con criterio de desempeño")
     i = st.text_area("Indicador de logro")
     t = st.text_input("Tema de estudio (opcional)")
     submitted = st.form_submit_button("Agregar destreza")
@@ -266,7 +290,7 @@ if st.session_state["destrezas"]:
     st.table(st.session_state["destrezas"])
 
 # -------------------------
-# Generar plan
+# Generar Plan
 # -------------------------
 def generar_plan():
     try:
@@ -277,10 +301,11 @@ def generar_plan():
             st.session_state["tema_insercion"],
             st.session_state["destrezas"],
         )
-        with st.spinner("⏳ Generando plan..."):
+        with st.spinner("⏳ Generando plan con IA..."):
             respuesta = call_model(prompt)
         st.session_state["plan_text"] = respuesta
         st.session_state["doc_bytes"] = create_docx_from_text(respuesta).getvalue()
+        st.session_state["excel_bytes"] = create_excel_from_plan(respuesta).getvalue()
         st.success("✔️ Plan generado con éxito.")
     except Exception as e:
         st.error(str(e))
@@ -288,14 +313,28 @@ def generar_plan():
 st.button("📄 Generar Plan de Clase", on_click=generar_plan)
 
 # -------------------------
-# Vista previa
+# Vista previa y descargas
 # -------------------------
 if st.session_state.get("plan_text"):
     st.markdown("---")
-    st.subheader("👀 Vista previa del Plan")
+    st.subheader("👀 Vista previa del Plan de Clase")
     st.markdown(st.session_state["plan_text"])
 
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        "💾 Exportar a Word",
+        data=st.session_state["doc_bytes"],
+        file_name=f"plan_{ts}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    st.download_button(
+        "📊 Exportar a Excel",
+        data=st.session_state["excel_bytes"],
+        file_name=f"plan_{ts}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # -------------------------
-# Créditos con efecto visual
+# Créditos
 # -------------------------
 st.markdown("<div class='footer'>✨ Creado por <span>Mgs. Xavier Quintuña C.</span> ✨</div>", unsafe_allow_html=True)
